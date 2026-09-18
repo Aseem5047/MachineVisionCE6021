@@ -1,1 +1,1 @@
-# Machine-Vision-CE6021-
+# Machine Vision (CE6021)
