@@ -20,6 +20,9 @@ Implement the two methods inside the SimpleImageProcessing class:
 Both methods should return the processed image as a uint8 numpy array with the
 same shape as the input.
 """
+
+# Unsharp Masking: https://en.wikipedia.org/wiki/Unsharp_masking
+
 import cv2
 import numpy as np
 import os
@@ -152,9 +155,7 @@ class SimpleImageProcessing:
         # (Equivalent alternative: self.add_blur(image, ksize=ksize))
         blurred = cv2.GaussianBlur(image, (ksize, ksize), 0)
 
-        # Unsharp mask in one call:
-        #   sharpened = (1 + strength) * image - strength * blurred
-        #             = image + strength * (image - blurred)
+        # Unsharp mask in one call: sharpened = (1 + strength) * image - strength * blurred = image + strength * (image - blurred)
         # i.e. add the removed high-frequency detail back, scaled by strength
         sharpened = cv2.addWeighted(image, 1 + strength, blurred, -strength, 0)
 
