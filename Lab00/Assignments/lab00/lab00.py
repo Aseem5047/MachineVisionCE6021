@@ -76,7 +76,7 @@ class SimpleImageProcessing:
             return blurred
         '''
         
-        # Read the kernel size from kwargs; fall back to the default of 15
+        # Read the kernel size from kwargs or fall back to the default of 15
         ksize = kwargs.get("ksize", 15)
 
         # GaussianBlur needs an odd kernel size (the kernel needs a centre
@@ -84,8 +84,7 @@ class SimpleImageProcessing:
         if ksize % 2 == 0:
             ksize += 1
 
-        # Blur with a (ksize x ksize) kernel. sigma=0 lets OpenCV derive the
-        # Gaussian's standard deviation from the kernel size
+        # Blur with a (ksize x ksize) kernel
         blurred = cv2.GaussianBlur(image, (ksize, ksize), 0)
 
         # uint8 in -> uint8 out, so no clip/cast is needed here
@@ -162,8 +161,7 @@ class SimpleImageProcessing:
         # The weighted sum can leave [0, 255], so clip to the valid pixel range
         sharpened = np.clip(sharpened, 0, 255)
 
-        # Cast to uint8 AFTER clipping (a uint8 cast wraps out-of-range values
-        # instead of capping them)
+        # Cast to uint8 AFTER clipping
         sharpened = sharpened.astype(np.uint8)
 
         return sharpened
