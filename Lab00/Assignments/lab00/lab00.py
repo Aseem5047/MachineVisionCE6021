@@ -142,8 +142,7 @@ class SimpleImageProcessing:
             return sharpened
         '''
 
-        # Read the blur kernel size and the sharpening gain from kwargs,
-        # falling back to their defaults (15 and 1.5)
+        # Read the blur kernel size and the sharpening strength from kwargs, falling back to their defaults (15 and 1.5)
         ksize = kwargs.get("ksize", 15)
         strength = kwargs.get("strength", 1.5)
 
@@ -151,12 +150,11 @@ class SimpleImageProcessing:
         if ksize % 2 == 0:
             ksize += 1
 
-        # Blurred copy = the low-frequency content of the image.
-        # (Equivalent alternative: self.add_blur(image, ksize=ksize))
-        blurred = cv2.GaussianBlur(image, (ksize, ksize), 0)
+        # Blurred copy of the image
+        blurred = cv2.GaussianBlur(image, (ksize, ksize), 0) # This is the same as self.add_blur(image, ksize=ksize)
 
-        # Unsharp mask in one call: sharpened = (1 + strength) * image - strength * blurred = image + strength * (image - blurred)
-        # i.e. add the removed high-frequency detail back, scaled by strength
+        # Unsharp masking: sharpened = (1 + strength) * image - strength * blurred = image + strength * (image - blurred)
+        # i.e. add the removed details back, scaled by strength
         sharpened = cv2.addWeighted(image, 1 + strength, blurred, -strength, 0)
 
         # The weighted sum can leave [0, 255], so clip to the valid pixel range
