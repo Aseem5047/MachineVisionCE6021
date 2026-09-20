@@ -78,19 +78,15 @@ class SimpleImageProcessing:
             #    is uint8, so no clip/cast needed here
             return blurred
         '''
-        
-        # Read the kernel size from kwargs or fall back to the default of 15
+
         ksize = kwargs.get("ksize", 15)
 
-        # GaussianBlur needs an odd kernel size (the kernel needs a centre
-        # pixel), so round an even value up to the next odd number (20 -> 21)
+        # Kernel size has to be odd
         if ksize % 2 == 0:
             ksize += 1
 
-        # Blur with a (ksize x ksize) kernel
         blurred = cv2.GaussianBlur(image, (ksize, ksize), 0)
 
-        # uint8 in -> uint8 out, so no clip/cast is needed here
         return blurred
 
     def add_sharpen(self, image, **kwargs):
@@ -142,25 +138,14 @@ class SimpleImageProcessing:
             return sharpened
         '''
 
-        # Read the blur kernel size and the sharpening strength from kwargs, falling back to their defaults (15 and 1.5)
         ksize = kwargs.get("ksize", 15)
         strength = kwargs.get("strength", 1.5)
 
-        # Same odd-kernel rule as in add_blur: round an even ksize up by one
-        if ksize % 2 == 0:
-            ksize += 1
-
-        # Blurred copy of the image
-        blurred = cv2.GaussianBlur(image, (ksize, ksize), 0) # This is the same as self.add_blur(image, ksize=ksize)
-
-        # Unsharp masking: sharpened = (1 + strength) * image - strength * blurred = image + strength * (image - blurred)
-        # i.e. add the removed details back, scaled by strength
+        blurred = self.add_blur(image, ksize=ksize)
         sharpened = cv2.addWeighted(image, 1 + strength, blurred, -strength, 0)
 
-        # The weighted sum can leave [0, 255], so clip to the valid pixel range
+        # clip before the cast, uint8 wraps around
         sharpened = np.clip(sharpened, 0, 255)
-
-        # Cast to uint8 AFTER clipping
         sharpened = sharpened.astype(np.uint8)
 
         return sharpened
