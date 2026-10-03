@@ -6,6 +6,7 @@ Run from the repo root:
 
 Results are written to a single HTML file next to this script.
 """
+import collections
 import os
 import sys
 import numpy as np
@@ -87,7 +88,18 @@ def run_aliasing_demo(pattern):
                              (sigma=SIGMA) first, then interpolated by the
                              same SCALE_FACTOR.
     """
-    raise NotImplementedError("Implement this method")
+    
+    ci = ConvolutionInterpolator()
+    
+    # Aliasing -> incorrect visual information introduced by inadequate sampling
+    aliased = ci.interpolate(pattern, scale_factor=SCALE_FACTOR, order=ORDER)
+
+    # Anti-aliasing -> reduction of incorrect visual information introduced by inadequate sampling
+    kernel = ci.gaussian_kernel_2d(SIGMA)
+    smoothed = ci.convolve(pattern, kernel)
+    filtered = ci.interpolate(smoothed, scale_factor=SCALE_FACTOR, order=ORDER)
+
+    return aliased, filtered
 
 def evaluate():
     print("Generating chirp test pattern...")

@@ -30,6 +30,7 @@ import numpy as np
 from scipy.signal import convolve2d
 from skimage.transform import rescale
 
+
 class ConvolutionInterpolator:
     """Small helper class for building Gaussian kernels and applying
     convolution / interpolation to 2D image arrays.
@@ -58,7 +59,21 @@ class ConvolutionInterpolator:
         Returns:
             ndarray: K x K kernel, dtype float, normalised to sum to 1.
         """
-        raise NotImplementedError("Implement this method")
+
+        # Determine the kernel range using the 3-sigma rule
+        half = int(np.ceil(3 * sigma))
+
+        # 1D Gaussian
+        x = np.arange(-half, half + 1)
+        g = 1.0 / (sigma * np.sqrt(2 * np.pi)) * np.exp(-(x ** 2) / (2 * sigma ** 2))
+
+        # 2D kernel using the outer product
+        kernel = np.outer(g, g)
+
+        # Normalise the kernel to ensure it sums to 1
+        kernel = kernel / kernel.sum()
+
+        return kernel
 
     def convolve(self, image, kernel, **kwargs):
         """Convolve a 2D image with a kernel.
@@ -78,7 +93,22 @@ class ConvolutionInterpolator:
             ndarray: Filtered image — same shape as the input under the
             default mode='same', or a different shape for 'valid'/'full'.
         """
-        raise NotImplementedError("Implement this method")
+
+        # Get convolution settings
+        mode = kwargs.get("mode", "same")
+        boundary = kwargs.get("boundary", "symm")
+        fillvalue = kwargs.get("fillvalue", 0)
+
+        # Perform the convolution
+        result = convolve2d(
+            image,
+            kernel,
+            mode=mode,
+            boundary=boundary,
+            fillvalue=fillvalue
+        )
+
+        return result
 
     def interpolate(self, image, **kwargs):
         """Resample a 2D image by a given scale factor.
@@ -96,4 +126,18 @@ class ConvolutionInterpolator:
         Returns:
             ndarray: Resampled image, shape scaled by scale_factor.
         """
-        raise NotImplementedError("Implement this method")
+
+        # Get interpolation settings
+        scale_factor = kwargs.get("scale_factor", 0.5)
+        order = kwargs.get("order", 0)
+
+        # Resize the image without additional smoothing
+        resampled = rescale(
+            image,
+            scale_factor,
+            order=order,
+            anti_aliasing=False,
+            mode="reflect"
+        )
+
+        return resampled
