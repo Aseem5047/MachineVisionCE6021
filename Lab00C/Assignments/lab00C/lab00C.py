@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+
 """Lab 00C — Introduction: Visualizing Results with Plotly.
 
 This lab is a companion to Lab 00. Instead of an image-processing task, the
