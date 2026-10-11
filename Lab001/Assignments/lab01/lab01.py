@@ -3,6 +3,7 @@ import numpy as np
 import cv2
 import os
 import sys
+from numpy.lib.stride_tricks import sliding_window_view
 
 # Allow helpers package to be found when this module is imported standalone
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -27,8 +28,17 @@ class GaussianFilt:
         Returns:
             gauss_1d (ndarray): Shape (k_size, 1) — column vector kernel.
         """
-        # Work out the necessary kernel size and range to generate the Gaussian over.
-        raise NotImplementedError("Implement this method")
+        sigma = self.sigma
+        k_size = int(6 * sigma + 1)
+        half = k_size // 2
+ 
+        x = np.arange(k_size) - half
+        g = np.exp(-(x ** 2) / (2 * sigma ** 2))
+        g = g / g.sum()
+ 
+        gauss_1d = np.expand_dims(g, axis=1).astype(np.float64)
+        return gauss_1d
+ 
 
     def my_conv_method(self, image):
         """Perform separable 2D Gaussian convolution via two 1D matrix-multiply passes.
@@ -39,4 +49,19 @@ class GaussianFilt:
         Returns:
             conv_img (ndarray): Blurred image of same shape, dtype uint8.
         """
-        raise NotImplementedError("Implement this method")
+        kernel = self.gauss_kernel()
+        k = kernel.shape[0]
+        pad = k // 2
+        k_vec = kernel.ravel()
+ 
+        img = image.astype(np.float64)
+        padded = np.pad(img, pad, mode="symmetric")
+ 
+        windows_h = sliding_window_view(padded, k, axis=1)
+        horiz = windows_h @ k_vec
+ 
+        windows_v = sliding_window_view(horiz, k, axis=0)
+        vert = windows_v @ k_vec
+ 
+        conv_img = np.clip(vert, 0, 255).astype(np.uint8)
+        return conv_img

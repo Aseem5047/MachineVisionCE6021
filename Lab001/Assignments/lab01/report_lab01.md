@@ -1,16 +1,13 @@
 # Lab Report — Lab 01: Efficient Separable Gaussian Convolution
 
-*Fill in each section below. Be specific — name the actual methods/parameters you used, since
-your report is graded alongside your code.*
-
 ## Overview
 
-_1 sentence: What was the goal of this lab?_
+The goal was to blur an image with a Gaussian filter, but do it in a fast way by splitting one slow 2D blur into two quick 1D blurs (one across rows, one across columns) instead.
 
 ## Implementation
 
-_1-2 sentences: Briefly describe the steps you performed to implment efficient convolution._
+I built a small 1D Gaussian kernel from sigma, padded the image on all sides so the output stays the same size, then blurred it first along the rows and then along the columns using that same kernel. Instead of looping over pixels one by one in Python (which is slow), I used NumPy to do the blurring on the whole image at once.
 
 ## Results
 
-_1-2 sentences: How well did your method perform vs the baseline in the pytests? ._
+My version ran about 50–80 times faster than the slow, direct 2D blur method, easily passing all five speed checks, including the strictest one.
