@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>05.01 Introduction to facial recognition · CE6021 Machine Vision</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+
+<script defer src="site.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="index.html">CE6021 Machine Vision</a>
+  <span class="crumb">Section 5: Facial recognition</span>
+</header>
+
+<div class="layout">
+<aside class="sidebar">
+  <nav class="toc">
+    <p class="toc-title">On this page</p>
+    <ul>
+    <li><a href="#learning-outcomes">Learning outcomes</a></li><li><a href="#the-two-tasks">The two tasks</a></li><li><a href="#why-facial-recognition-is-harder">Why facial recognition is harder</a></li><li><a href="#intra-personal-variation">Intra-personal variation</a></li><li><a href="#constrained-and-unconstrained-recognition">Constrained and unconstrained recognition</a></li><li><a href="#the-facial-recognition-pipeline">The facial-recognition pipeline</a></li><li><a href="#self-check">Check your understanding</a></li>
+    </ul>
+  </nav>
+  <nav class="section-nav">
+    <p class="toc-title">Section 5</p>
+    <ul>
+    
+      <li class="current">
+        <span>1. Introduction to facial recognition</span>
+        
+      </li>
+    
+      <li>
+        <a href="05_02.html">2. Principal component analysis</a>
+      </li>
+    
+      <li>
+        <a href="05_03.html">3. Eigenfaces</a>
+      </li>
+    
+      <li>
+        <a href="05_04.html">4. Linear discriminant analysis</a>
+      </li>
+    
+      <li>
+        <a href="05_05.html">5. Fisherfaces</a>
+      </li>
+    
+    </ul>
+  </nav>
+</aside>
+
+<main class="lesson">
+  <p class="kicker">Lesson 05.01</p>
+  <h1>Introduction to facial recognition</h1>
+  <p class="summary">The identification and verification tasks, open and closed sets, why recognising faces is harder than detecting objects, intra-personal variation, constrained versus unconstrained datasets, and the stages of a recognition pipeline.</p>
+
+  <h2 id="learning-outcomes">Learning outcomes</h2>
+<p>After this lesson you should be able to:</p>
+<ul>
+<li>distinguish facial <strong>identification</strong> from <strong>verification</strong>, and <strong>open</strong> from <strong>closed</strong> set;</li>
+<li>explain why facial recognition is harder than general object detection;</li>
+<li>separate <strong>inter-personal</strong> from <strong>intra-personal</strong> differences, and <strong>intrinsic</strong> from <strong>extrinsic</strong> factors;</li>
+<li>contrast <strong>constrained</strong> and <strong>unconstrained</strong> recognition;</li>
+<li>list the stages of a modern facial-recognition <strong>pipeline</strong>.</li>
+</ul>
+<h2 id="the-two-tasks">The two tasks</h2>
+<h3>Identification</h3>
+<p>In <strong>facial identification</strong> the image of an unknown person, called the <strong>probe</strong>, is compared against multiple identities held in a <strong>gallery</strong> and an identity label is assigned. The task comes in two forms:</p>
+<ul>
+<li><strong>closed set</strong>: every probe identity is present in the gallery, so the probe can simply be given the best match;</li>
+<li><strong>open set</strong>: the probe identity may not be in the gallery, and the system must label such a face <strong>unknown</strong>.</li>
+</ul>
+<p>The open-set case is the harder one, because the system has to reject unknown faces at an acceptable error rate. Identification is used widely in security and surveillance, where databases of facial images are searched automatically, and in media applications, where an index of the actors on screen can be generated automatically.</p>
+<h3>Verification</h3>
+<p>In <strong>facial verification</strong> we check a <strong>purported</strong> identity: is this person who they say they are? The probe is compared against available ground-truth examples of the claimed identity, so it is a <strong>1:1</strong> comparison, and it is a special case of open-set identification. Verification only makes sense as an open-set task, because the system must be tested with <strong>impostor</strong> faces. Applications include biometric identification such as phone unlocking, airport security, access control and authentication for financial transactions.</p>
+<figure class="lesson-fig" id="fig-identification_verification"><img src="figures/identification_verification.png" alt="The two facial-recognition tasks. In identification a probe image of an unknown person is compared against a gallery of many identities and a label is assigned. In verification the purported identity of a person is checked against stored examples of who they claim to be, a 1:1 comparison that must accept the genuine user and reject impostors."><figcaption><b>Figure 1.</b> The two facial-recognition tasks. In identification a probe image of an unknown person is compared against a gallery of many identities and a label is assigned. In verification the purported identity of a person is checked against stored examples of who they claim to be, a 1:1 comparison that must accept the genuine user and reject impostors. <span class="credit">Image: <a href="https://scikit-learn.org/stable/datasets/real_world.html#the-olivetti-faces-dataset">The Database of Faces (Olivetti / AT&amp;T)</a>, AT&amp;T Laboratories Cambridge, <a href="https://cam-orl.co.uk/facedatabase.html">free for research use</a>.</span></figcaption></figure>
+<h2 id="why-facial-recognition-is-harder">Why facial recognition is harder</h2>
+<p>Facial recognition can be considered a sub-task of object detection, but several things make it more difficult:</p>
+<ul>
+<li>there may be very <strong>many classes</strong>, one per identity, especially in a large database;</li>
+<li>there may be very <strong>few examples</strong> of each identity, possibly only one;</li>
+<li>in open-set use there may be a very large number of <strong>unknown identities</strong> to reject;</li>
+<li>classes of object are often quite distinct, think of cars versus footballs, whereas faces are separated only by small <strong>inter-personal differences</strong>, and different people can look alike;</li>
+<li>images of one person vary a great deal, the <strong>intra-personal differences</strong>.</li>
+</ul>
+<figure class="lesson-fig" id="fig-fr_challenges"><img src="figures/fr_challenges.png" alt="Facial recognition is a sub-task of object detection, but a harder one. There are many identities and few examples of each, and faces are separated only by small inter-personal differences while images of one person vary a great deal. In this dataset two images of different people are closer in raw pixel distance than two images of the same person, which is exactly why a good representation is needed."><figcaption><b>Figure 2.</b> Facial recognition is a sub-task of object detection, but a harder one. There are many identities and few examples of each, and faces are separated only by small inter-personal differences while images of one person vary a great deal. In this dataset two images of different people are closer in raw pixel distance than two images of the same person, which is exactly why a good representation is needed. <span class="credit">Image: <a href="https://scikit-learn.org/stable/datasets/real_world.html#the-olivetti-faces-dataset">The Database of Faces (Olivetti / AT&amp;T)</a>, AT&amp;T Laboratories Cambridge, <a href="https://cam-orl.co.uk/facedatabase.html">free for research use</a>.</span></figcaption></figure>
+<h2 id="intra-personal-variation">Intra-personal variation</h2>
+<p>Intra-personal differences have two sources. <strong>Intrinsic</strong> factors belong to the person: changes of expression, ageing, and the presence or absence of facial hair. <strong>Extrinsic</strong> factors come from the imaging conditions: the <strong>pose</strong> of the person or camera angle, facial paraphernalia such as hats and glasses, which act like occlusion, and <strong>illumination</strong>, which has a large effect on appearance and consequently on performance.</p>
+<figure class="lesson-fig" id="fig-intra_personal"><img src="figures/intra_personal.png" alt="Intra-personal variation: the ways images of one person differ. Intrinsic factors belong to the person, such as expression, ageing and facial hair (top row, four images of one identity). Extrinsic factors come from the imaging conditions: pose, paraphernalia such as glasses, and illumination. The illumination ramps and the occlusion in the bottom row are applied synthetically to one image so that the effect can be seen in isolation."><figcaption><b>Figure 3.</b> Intra-personal variation: the ways images of one person differ. Intrinsic factors belong to the person, such as expression, ageing and facial hair (top row, four images of one identity). Extrinsic factors come from the imaging conditions: pose, paraphernalia such as glasses, and illumination. The illumination ramps and the occlusion in the bottom row are applied synthetically to one image so that the effect can be seen in isolation. <span class="credit">Image: <a href="https://scikit-learn.org/stable/datasets/real_world.html#the-olivetti-faces-dataset">The Database of Faces (Olivetti / AT&amp;T)</a>, AT&amp;T Laboratories Cambridge, <a href="https://cam-orl.co.uk/facedatabase.html">free for research use</a>.</span></figcaption></figure>
+<h2 id="constrained-and-unconstrained-recognition">Constrained and unconstrained recognition</h2>
+<p>Because the problem is so challenging, early approaches used <strong>constrained</strong> datasets. The Olivetti dataset used throughout this section consists of centred frontal views with limited pose and expression variation, taken under constant illumination, with a limited number of identities, and recognition is performed closed-set with a train/test split. Such datasets allowed the first successful methods to be developed, but their performance is not robust: training or testing under different conditions, for example varying illumination or pose, often gives poor results. Many modern applications such as access control do operate under constrained conditions, so consistent performance is achievable there.</p>
+<figure class="lesson-fig" id="fig-constrained_dataset"><img src="figures/constrained_dataset.png" alt="A constrained dataset. The Olivetti faces are centred frontal views at a fixed size, with limited pose and expression variation and nearly constant illumination, and there are only 40 identities with ten images each. Constraining the images this way let the early methods of the next lessons succeed; their performance is far less robust when illumination or pose varies. Many real applications, such as access control, are themselves constrained."><figcaption><b>Figure 4.</b> A constrained dataset. The Olivetti faces are centred frontal views at a fixed size, with limited pose and expression variation and nearly constant illumination, and there are only 40 identities with ten images each. Constraining the images this way let the early methods of the next lessons succeed; their performance is far less robust when illumination or pose varies. Many real applications, such as access control, are themselves constrained. <span class="credit">Image: <a href="https://scikit-learn.org/stable/datasets/real_world.html#the-olivetti-faces-dataset">The Database of Faces (Olivetti / AT&amp;T)</a>, AT&amp;T Laboratories Cambridge, <a href="https://cam-orl.co.uk/facedatabase.html">free for research use</a>.</span></figcaption></figure>
+<p><strong>Unconstrained</strong> facial recognition, or recognition &quot;in the wild&quot;, is much harder. Faces must first be <strong>detected</strong> in the image, and there is wide variation in scale, pose, illumination, expression and occlusion.</p>
+<figure class="lesson-fig" id="fig-unconstrained"><img src="figures/unconstrained.png" alt="Unconstrained facial recognition. Faces must first be located in the image, and they appear at very different scales, poses and lighting. The crops taken straight from the detector vary in size, tilt and centring, unlike the neatly aligned images of a constrained dataset."><figcaption><b>Figure 5.</b> Unconstrained facial recognition. Faces must first be located in the image, and they appear at very different scales, poses and lighting. The crops taken straight from the detector vary in size, tilt and centring, unlike the neatly aligned images of a constrained dataset. <span class="credit">Image: <a href="https://commons.wikimedia.org/wiki/File:Jimmy_answering_questions.jpg">Jimmy answering questions</a>, Beatrice Murch, <a href="https://creativecommons.org/licenses/by/3.0">CC BY 3.0</a>.</span></figcaption></figure>
+<h2 id="the-facial-recognition-pipeline">The facial-recognition pipeline</h2>
+<p>A modern unconstrained system has several stages:</p>
+<ol>
+<li><strong>Localise</strong> the face in the image. Because faces vary greatly in scale, specialised face-detection networks are used.</li>
+<li><strong>Align</strong> the detected face to a centred view, by finding <strong>facial landmarks</strong> and warping the image.</li>
+<li><strong>Represent</strong> the face in a more discriminative form. In classical systems this is a dimension-reducing transformation such as principal component analysis in the Eigenface method.</li>
+<li><strong>Recognise</strong>, often with a simple classifier such as nearest neighbours, sometimes with something more complex.</li>
+</ol>
+<p>The remaining lessons of this section are about stage 3.</p>
+<figure class="lesson-fig" id="fig-fr_pipeline"><img src="figures/fr_pipeline.png" alt="The stages of a modern facial-recognition system. Faces are localised, aligned to a canonical centred view using facial landmarks, converted into a discriminative representation, and finally matched, often by a simple nearest-neighbour search. The rest of this section concerns the representation stage."><figcaption><b>Figure 6.</b> The stages of a modern facial-recognition system. Faces are localised, aligned to a canonical centred view using facial landmarks, converted into a discriminative representation, and finally matched, often by a simple nearest-neighbour search. The rest of this section concerns the representation stage.</figcaption></figure>
+<section class="selfcheck"><h2 id="self-check">Check your understanding</h2><div class="sc-q" data-answer="1"><p class="sc-text">1. In facial identification, the image of the unknown person is called the</p><ul class="sc-options"><li><label><input type="radio" name="sc05_01_0" value="0"> gallery</label></li><li><label><input type="radio" name="sc05_01_0" value="1"> probe</label></li><li><label><input type="radio" name="sc05_01_0" value="2"> impostor</label></li><li><label><input type="radio" name="sc05_01_0" value="3"> landmark</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>The probe is compared against the gallery, which holds the known identities.</p></div><div class="sc-q" data-answer="1"><p class="sc-text">2. What distinguishes open-set from closed-set identification?</p><ul class="sc-options"><li><label><input type="radio" name="sc05_01_1" value="0"> Open set uses colour images</label></li><li><label><input type="radio" name="sc05_01_1" value="1"> In open set the probe identity may not be in the gallery, so the system must be able to answer &#x27;unknown&#x27;</label></li><li><label><input type="radio" name="sc05_01_1" value="2"> Closed set has more identities</label></li><li><label><input type="radio" name="sc05_01_1" value="3"> Open set is a 1:1 comparison</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>Rejecting unknown identities at an acceptable error rate is what makes the open-set task harder.</p></div><div class="sc-q" data-answer="1"><p class="sc-text">3. Facial verification is</p><ul class="sc-options"><li><label><input type="radio" name="sc05_01_2" value="0"> a 1:N search of a gallery</label></li><li><label><input type="radio" name="sc05_01_2" value="1"> a 1:1 check of a claimed identity, and a special case of open-set identification</label></li><li><label><input type="radio" name="sc05_01_2" value="2"> only possible on closed sets</label></li><li><label><input type="radio" name="sc05_01_2" value="3"> the same as face detection</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>Verification must be tested with impostors, so it only makes sense as an open-set task.</p></div><div class="sc-q" data-answer="2"><p class="sc-text">4. Which is an EXTRINSIC intra-personal factor?</p><ul class="sc-options"><li><label><input type="radio" name="sc05_01_3" value="0"> Ageing</label></li><li><label><input type="radio" name="sc05_01_3" value="1"> Facial expression</label></li><li><label><input type="radio" name="sc05_01_3" value="2"> Camera angle and illumination</label></li><li><label><input type="radio" name="sc05_01_3" value="3"> Facial hair</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>Extrinsic factors come from the imaging conditions; intrinsic factors belong to the person.</p></div><div class="sc-q" data-answer="1"><p class="sc-text">5. Why is facial recognition harder than typical object detection?</p><ul class="sc-options"><li><label><input type="radio" name="sc05_01_4" value="0"> Faces are larger than objects</label></li><li><label><input type="radio" name="sc05_01_4" value="1"> There are many classes with few examples each, and inter-personal differences are small while intra-personal differences are large</label></li><li><label><input type="radio" name="sc05_01_4" value="2"> Faces cannot be detected</label></li><li><label><input type="radio" name="sc05_01_4" value="3"> Faces have no edges</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>Car versus football is an easy distinction; two faces are separated only by small differences.</p></div><div class="sc-q" data-answer="1"><p class="sc-text">6. In the recognition pipeline, what does the alignment stage do?</p><ul class="sc-options"><li><label><input type="radio" name="sc05_01_5" value="0"> Finds the faces in the image</label></li><li><label><input type="radio" name="sc05_01_5" value="1"> Warps the detected face to a centred canonical view, usually using facial landmarks</label></li><li><label><input type="radio" name="sc05_01_5" value="2"> Compresses the face with PCA</label></li><li><label><input type="radio" name="sc05_01_5" value="3"> Assigns the identity label</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>Alignment is what turns a ragged detector crop into something resembling a constrained dataset image.</p></div><p><button type="button" class="sc-check">Check answers</button> <span class="sc-score"></span></p></section>
+
+
+  
+
+  
+  <section class="credits">
+    <h2 id="image-credits">Image credits</h2>
+    <ul><li><a href="https://commons.wikimedia.org/wiki/File:Jimmy_answering_questions.jpg">Jimmy answering questions</a>, Beatrice Murch, <a href="https://creativecommons.org/licenses/by/3.0">CC BY 3.0</a></li><li><a href="https://scikit-learn.org/stable/datasets/real_world.html#the-olivetti-faces-dataset">The Database of Faces (Olivetti / AT&amp;T)</a>, AT&amp;T Laboratories Cambridge, <a href="https://cam-orl.co.uk/facedatabase.html">free for research use</a></li></ul>
+    <p>Other figures are generated from synthetic data by the lesson engines.</p>
+  </section>
+  
+
+  <nav class="pager">
+    <a class="prev" href="04_06.html">&larr; 04.06 Histogram of oriented gradients</a>
+    <a class="next" href="05_02.html">05.02 Principal component analysis &rarr;</a>
+  </nav>
+  <footer class="foot">© Dr Tony Scanlan, University of Limerick. Figures generated by the CE6021 lesson builder.</footer>
+</main>
+</div>
+</body>
+</html>

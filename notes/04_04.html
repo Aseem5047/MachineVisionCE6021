@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>04.04 Template matching · CE6021 Machine Vision</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer="" src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer="" src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+
+<script defer="" src="site.js"></script>
+</head><body><header class="topbar"><a class="brand" href="index.html">CE6021 Machine Vision</a> <span class="crumb">Section 4: Object detection and classification</span></header>
+<div class="layout">
+<aside class="sidebar"><nav class="toc">
+<p class="toc-title">On this page</p>
+<ul>
+<li><a href="#learning-outcomes">Learning outcomes</a></li>
+<li><a href="#basic-object-detection">Basic object detection</a></li>
+<li><a href="#template-matching">Template matching</a></li>
+<li><a href="#shape-based-matching">Shape-based matching</a></li>
+<li><a href="#self-check">Check your understanding</a></li>
+</ul>
+</nav><nav class="section-nav">
+<p class="toc-title">Section 4</p>
+<ul>
+<li><a href="04_01.html">1. Introduction to object detection</a></li>
+<li><a href="04_02.html">2. Machine learning for image recognition</a></li>
+<li><a href="04_03.html">3. Classifiers</a></li>
+<li class="current"><span>4. Template matching</span></li>
+<li><a href="04_05.html">5. The Viola-Jones algorithm</a></li>
+<li><a href="04_06.html">6. Histogram of oriented gradients</a></li>
+</ul>
+</nav></aside>
+<main class="lesson">
+<p class="kicker">Lesson 04.04</p>
+<h1>Template matching</h1>
+<p class="summary">Detecting a specific object by exhaustive comparison with a template: Euclidean and correlation-based similarity, normalised cross-correlation, and shape-based matching with the distance transform, chamfer distance and Hausdorff distance.</p>
+<h2 id="learning-outcomes">Learning outcomes</h2>
+<p>After this lesson you should be able to:</p>
+<ul>
+<li>describe <strong>template matching</strong> and its similarity measures: Euclidean distance, cross-correlation and <strong>normalised cross-correlation</strong>;</li>
+<li>explain why <strong>shape-based</strong> matching is more robust than pixel correlation;</li>
+<li>use the <strong>distance transform</strong> to compute distances between shapes efficiently;</li>
+<li>describe <strong>chamfer matching</strong> and compute the directed and full <strong>Hausdorff distance</strong>.</li>
+</ul>
+<h2 id="basic-object-detection">Basic object detection</h2>
+<p>Basic object detection looks for a specific object, or type of object, in an image. Keypoint matching does this robustly against orientation, scale and illumination changes. An alternative is to use the object, or part of it, as a <strong>template</strong> and search the image exhaustively for the best match. Template matching is a pure image-processing approach without machine learning, which makes it less robust than the Viola-Jones and HOG detectors to changes in orientation, scale and illumination.</p>
+<h2 id="template-matching">Template matching</h2>
+<p>The template is moved systematically over every position of the image, like a kernel in convolution or a structuring element in a non-linear filter, and a <strong>similarity metric</strong> is evaluated at each position. A stride of 1 gives the best chance of an exact match; a larger stride reduces computation. The simplest metric is the <strong>Euclidean distance</strong> between corresponding pixels of the template and the image region,</p>
+<p>$$d(m, n) = \sqrt{\sum_{i, j} \big( T[i, j] - I[i + m, j + n] \big)^2 }, \tag{1}$$</p>
+<p>with the template shifted by $(m, n)$; the position with the <strong>lowest</strong> score is the best match.</p>
+<figure class="lesson-fig" id="fig-template_search"><img src="figures/template_search.png" alt="Template matching. A template (the owl's head) is moved systematically over the image, like a kernel in convolution, and a similarity score is computed at every position. With the Euclidean distance between template and image pixels the position with the lowest score is the best match.">
+<figcaption><b>Figure 1.</b> Template matching. A template (the owl's head) is moved systematically over the image, like a kernel in convolution, and a similarity score is computed at every position. With the Euclidean distance between template and image pixels the position with the lowest score is the best match. <span class="credit">Image: <a href="https://commons.wikimedia.org/wiki/File:Eastern_screech_owl_(44327).jpg">Eastern screech owl (44327)</a>, Rhododendrites, <a href="https://creativecommons.org/licenses/by-sa/4.0">CC BY-SA 4.0</a>.</span></figcaption>
+</figure>
+<h3>Correlation-based similarity</h3>
+<p><strong>Cross-correlation</strong> between template and image is another similarity measure. Its equation resembles convolution but the template is not reversed, and the <strong>highest</strong> value marks the best match. Plain correlation has a weakness: the score also grows wherever the image is bright, so bright regions produce false local maxima.</p>
+<h3>Normalised cross-correlation</h3>
+<p><strong>Normalised cross-correlation</strong> keeps the element-wise multiply-and-sum but subtracts the mean and divides by the standard deviation of both template and image region. The template's statistics are constant, but the image mean and standard deviation must be recomputed at every position, so NCC is more expensive than plain correlation. In return the false maxima in bright regions disappear.</p>
+<figure class="lesson-fig" id="fig-correlation_vs_ncc"><img src="figures/correlation_vs_ncc.png" alt="Correlation-based similarity. Plain cross-correlation (the template multiplied with the image at each shift and summed, without reversal) peaks wherever the image is bright, giving false maxima. Normalised cross-correlation subtracts the local mean and divides by the standard deviation at every position, so the peak lands on the matching eye. The normalisation makes it more expensive to compute.">
+<figcaption><b>Figure 2.</b> Correlation-based similarity. Plain cross-correlation (the template multiplied with the image at each shift and summed, without reversal) peaks wherever the image is bright, giving false maxima. Normalised cross-correlation subtracts the local mean and divides by the standard deviation at every position, so the peak lands on the matching eye. The normalisation makes it more expensive to compute. <span class="credit">Image: <a href="https://commons.wikimedia.org/wiki/File:My_Favourite_Faces_(Imagicity_640).jpg">My Favourite Faces (Imagicity 640)</a>, Graham Crumb, <a href="https://creativecommons.org/licenses/by-sa/3.0">CC BY-SA 3.0</a>.</span></figcaption>
+</figure>
+<h2 id="shape-based-matching">Shape-based matching</h2>
+<p>Correlation detects regions of similar pixels with a sharp peak when the template fits, but the peak collapses with even small changes in orientation or appearance, and its sharpness gives little indication of how close a near-match is. <strong>Shape-based</strong> matching instead extracts the object outline by edge detection and matches it against the edge image of the scene, using a <strong>distance between binary shapes</strong> as the score; this tolerates minor changes of orientation and appearance. As before the template is moved over the image and the distance evaluated at each position.</p>
+<figure class="lesson-fig" id="fig-shape_matching"><img src="figures/shape_matching.png" alt="Shape-based matching. Correlation on pixels is not robust to even small changes of orientation or appearance: the peak collapses. Matching the edge outline of the template against the edge image of the scene instead, with a distance between binary shapes as the score, tolerates such changes.">
+<figcaption><b>Figure 3.</b> Shape-based matching. Correlation on pixels is not robust to even small changes of orientation or appearance: the peak collapses. Matching the edge outline of the template against the edge image of the scene instead, with a distance between binary shapes as the score, tolerates such changes.</figcaption>
+</figure>
+<h3>Shortest distance</h3>
+<p>The first candidate metric is the shortest distance between shapes $A$ and $B$: for every point $a \in A$ find the smallest distance to any point $b \in B$, and keep the smallest of these,</p>
+<p>$$d_{min}(A, B) = \min_{a \in A} \min_{b \in B} \| a - b \|. \tag{2}$$</p>
+<p>The same shortest distance results for shapes in very different relative positions, so it is not an effective measure of overlap. It is, however, cheap to compute with the <strong>distance transform</strong>: the distance transform of the binary image of $B$'s edges gives, at every pixel, the shortest distance to $B$, so sampling it at the pixels of $A$ gives all the required distances at once.</p>
+<figure class="lesson-fig" id="fig-shortest_distance"><img src="figures/shortest_distance.png" alt="The shortest distance is a poor measure of how well two shapes match. In (a) the outlines nearly coincide and in (b) one is rotated and pushed away, yet both have exactly the same shortest distance (solid line), because only the single closest pair of points is used. The furthest-nearest pair (dashed), which is the Hausdorff distance, separates the two cases immediately. Shortest distances are cheap to get: the distance transform of B gives the distance from every pixel to B, so the values at A's pixels are all the distances at once (c).">
+<figcaption><b>Figure 4.</b> The shortest distance is a poor measure of how well two shapes match. In (a) the outlines nearly coincide and in (b) one is rotated and pushed away, yet both have exactly the same shortest distance (solid line), because only the single closest pair of points is used. The furthest-nearest pair (dashed), which is the Hausdorff distance, separates the two cases immediately. Shortest distances are cheap to get: the distance transform of B gives the distance from every pixel to B, so the values at A's pixels are all the distances at once (c).</figcaption>
+</figure>
+<h3>Chamfer matching</h3>
+<p>Chamfer matching is a better alternative. Edges are detected in the scene and the edge image is inverted, so that edges are black; the distance transform of this image gives every pixel its distance to the nearest edge. The result is called the <strong>chamfer image</strong>, because the edges become gradual slopes like a chamfered edge in woodwork. The binary template is applied at every position and the distance values under its pixels are <strong>summed</strong>,</p>
+<p>$$D_{chamfer}(m, n) = \frac{1}{|T|} \sum_{(i, j) \in T} DT[i + m, j + n], \tag{3}$$</p>
+<p>so that every template pixel, not only the nearest, contributes; the position with the minimum sum is the match. The sum can be computed as a correlation of the binary template with the chamfer image, and the global minimum found with a small further algorithm of erosion, comparison and thresholding.</p>
+<figure class="lesson-fig" id="fig-chamfer_matching"><img src="figures/chamfer_matching.png" alt="Chamfer matching. Edges are detected and inverted, and the distance transform gives every pixel its distance to the nearest edge; the result is called the chamfer image because its edges become gentle slopes. A binary template, here a ring with the radius of the plate, is placed at every position and the chamfer values under it are averaged, which can be done as a correlation. The global minimum of that score is where the template best fits the edges.">
+<figcaption><b>Figure 5.</b> Chamfer matching. Edges are detected and inverted, and the distance transform gives every pixel its distance to the nearest edge; the result is called the chamfer image because its edges become gentle slopes. A binary template, here a ring with the radius of the plate, is placed at every position and the chamfer values under it are averaged, which can be done as a correlation. The global minimum of that score is where the template best fits the edges. <span class="credit">Image: <a href="https://commons.wikimedia.org/wiki/File:Chinese_-_Plate_with_Dutch_Couple_-_Walters_492419.jpg">Plate with Dutch Couple</a>, Walters Art Museum, Public domain.</span></figcaption>
+</figure>
+<h3>Hausdorff distance</h3>
+<p>The <strong>directed Hausdorff distance</strong> from $A$ to $B$ takes, for every $a \in A$, the smallest distance to any point of $B$, and keeps the <strong>largest</strong> of these:</p>
+<p>$$h(A, B) = \max_{a \in A} \min_{b \in B} \| a - b \|, \tag{4}$$</p>
+<p>which reduces to a maximum over the distance transform of $B$ sampled at $A$. It finds the point of $A$ furthest from $B$ and is far better than the shortest distance at telling overlapping from non-overlapping shapes. The two directed distances are <strong>not symmetric</strong>, $h(A, B) \neq h(B, A)$ in general, and the reverse direction needs the distance transform of $A$. The overall Hausdorff distance is the larger of the two,</p>
+<p>$$H(A, B) = \max\big( h(A, B),\, h(B, A) \big). \tag{5}$$</p>
+<p>Because it focuses on outlier points, where the shapes diverge most, a percentile of the distances (for example the 75th) is often used instead of the maximum. The Hausdorff distance can match templates despite differences in orientation.</p>
+<figure class="lesson-fig" id="fig-hausdorff"><img src="figures/hausdorff.png" alt="The Hausdorff distance. For every point of A the distance to the nearest point of B is found (grey lines) and the largest of these is the directed distance h(A → B); h(B → A) is defined the other way round and is generally different. The Hausdorff distance is the larger of the two. It separates overlapping from non-overlapping shapes far better than the shortest distance, and can be computed from distance transforms.">
+<figcaption><b>Figure 6.</b> The Hausdorff distance. For every point of A the distance to the nearest point of B is found (grey lines) and the largest of these is the directed distance h(A → B); h(B → A) is defined the other way round and is generally different. The Hausdorff distance is the larger of the two. It separates overlapping from non-overlapping shapes far better than the shortest distance, and can be computed from distance transforms.</figcaption>
+</figure>
+<section class="worked-example" id="ex-hausdorff-3">
+<h4>Worked example 1: Hausdorff Distance</h4>
+<div class="example-q">
+<p>Given two point sets $A = \{\,(2.5,5.05), (2.76,3.78), (4.05,3.65), (4.58,4.83), (3.62,5.69)\,\}$ and $B = \{\,(2.61,3.74), (3.23,2.61), (4.5,2.84), (4.67,4.12), (3.5,4.68)\,\}$:</p>
+<p><img src="../pic0_20260918162830225.png" alt="Hausdorff distance point sets"></p>
+<p>Distances are Euclidean: $\|p - q\| = \sqrt{(p_x-q_x)^2+(p_y-q_y)^2}$.</p>
+<p><strong>(a)</strong> Compute the <strong>directed</strong> Hausdorff distance $h(A \to B) = \max_{a \in A}\;\min_{b \in B}\;\|a - b\|$</p>
+<p><strong>(b)</strong> Compute the <strong>directed</strong> Hausdorff distance $h(B \to A) = \max_{b \in B}\;\min_{a \in A}\;\|b - a\|$</p>
+<p><strong>(c)</strong> Hence determine the <strong>Hausdorff distance</strong> $H(A,B) = \max\bigl(h(A \to B),\;h(B \to A)\bigr)$</p>
+</div>
+<details class="example-sol">
+<summary>Show the solution</summary>
+<h4>Part (a) — $h(A \to B)$</h4>
+<p>For each $a_i \in A$, compute $\|a_i - b_j\|$ for every $b_j \in B$ and keep the minimum.</p>
+<p><strong>$a_0 = (2.5, 5.05)$</strong></p>
+<ul>
+<li>$b_0 = (2.61,3.74)$: $\|a_0 - b_0\| = 1.31$</li>
+<li>$b_1 = (3.23,2.61)$: $\|a_0 - b_1\| = 2.55$</li>
+<li>$b_2 = (4.5,2.84)$: $\|a_0 - b_2\| = 2.98$</li>
+<li>$b_3 = (4.67,4.12)$: $\|a_0 - b_3\| = 2.36$</li>
+<li>$b_4 = (3.5,4.68)$: $\|a_0 - b_4\| = 1.07$</li>
+</ul>
+<p>$\min = 1.07$</p>
+<p><strong>$a_1 = (2.76, 3.78)$</strong></p>
+<ul>
+<li>$b_0 = (2.61,3.74)$: $\|a_1 - b_0\| = 0.16$</li>
+<li>$b_1 = (3.23,2.61)$: $\|a_1 - b_1\| = 1.26$</li>
+<li>$b_2 = (4.5,2.84)$: $\|a_1 - b_2\| = 1.98$</li>
+<li>$b_3 = (4.67,4.12)$: $\|a_1 - b_3\| = 1.94$</li>
+<li>$b_4 = (3.5,4.68)$: $\|a_1 - b_4\| = 1.17$</li>
+</ul>
+<p>$\min = 0.16$</p>
+<p><strong>$a_2 = (4.05, 3.65)$</strong></p>
+<ul>
+<li>$b_0 = (2.61,3.74)$: $\|a_2 - b_0\| = 1.44$</li>
+<li>$b_1 = (3.23,2.61)$: $\|a_2 - b_1\| = 1.32$</li>
+<li>$b_2 = (4.5,2.84)$: $\|a_2 - b_2\| = 0.93$</li>
+<li>$b_3 = (4.67,4.12)$: $\|a_2 - b_3\| = 0.78$</li>
+<li>$b_4 = (3.5,4.68)$: $\|a_2 - b_4\| = 1.17$</li>
+</ul>
+<p>$\min = 0.78$</p>
+<p><strong>$a_3 = (4.58, 4.83)$</strong></p>
+<ul>
+<li>$b_0 = (2.61,3.74)$: $\|a_3 - b_0\| = 2.25$</li>
+<li>$b_1 = (3.23,2.61)$: $\|a_3 - b_1\| = 2.6$</li>
+<li>$b_2 = (4.5,2.84)$: $\|a_3 - b_2\| = 1.99$</li>
+<li>$b_3 = (4.67,4.12)$: $\|a_3 - b_3\| = 0.72$</li>
+<li>$b_4 = (3.5,4.68)$: $\|a_3 - b_4\| = 1.09$</li>
+</ul>
+<p>$\min = 0.72$</p>
+<p><strong>$a_4 = (3.62, 5.69)$</strong></p>
+<ul>
+<li>$b_0 = (2.61,3.74)$: $\|a_4 - b_0\| = 2.2$</li>
+<li>$b_1 = (3.23,2.61)$: $\|a_4 - b_1\| = 3.1$</li>
+<li>$b_2 = (4.5,2.84)$: $\|a_4 - b_2\| = 2.98$</li>
+<li>$b_3 = (4.67,4.12)$: $\|a_4 - b_3\| = 1.89$</li>
+<li>$b_4 = (3.5,4.68)$: $\|a_4 - b_4\| = 1.02$</li>
+</ul>
+<p>$\min = 1.02$</p>
+<p>$$h(A \to B) = \max(1.07, 0.16, 0.78, 0.72, 1.02) = 1.07$$</p>
+<h4>Part (b) — $h(B \to A)$</h4>
+<p>For each $b_j \in B$, compute $\|b_j - a_i\|$ for every $a_i \in A$ and keep the minimum.</p>
+<p><strong>$b_0 = (2.61, 3.74)$</strong></p>
+<ul>
+<li>$a_0 = (2.5,5.05)$: $\|b_0 - a_0\| = 1.31$</li>
+<li>$a_1 = (2.76,3.78)$: $\|b_0 - a_1\| = 0.16$</li>
+<li>$a_2 = (4.05,3.65)$: $\|b_0 - a_2\| = 1.44$</li>
+<li>$a_3 = (4.58,4.83)$: $\|b_0 - a_3\| = 2.25$</li>
+<li>$a_4 = (3.62,5.69)$: $\|b_0 - a_4\| = 2.2$</li>
+</ul>
+<p>$\min = 0.16$</p>
+<p><strong>$b_1 = (3.23, 2.61)$</strong></p>
+<ul>
+<li>$a_0 = (2.5,5.05)$: $\|b_1 - a_0\| = 2.55$</li>
+<li>$a_1 = (2.76,3.78)$: $\|b_1 - a_1\| = 1.26$</li>
+<li>$a_2 = (4.05,3.65)$: $\|b_1 - a_2\| = 1.32$</li>
+<li>$a_3 = (4.58,4.83)$: $\|b_1 - a_3\| = 2.6$</li>
+<li>$a_4 = (3.62,5.69)$: $\|b_1 - a_4\| = 3.1$</li>
+</ul>
+<p>$\min = 1.26$</p>
+<p><strong>$b_2 = (4.5, 2.84)$</strong></p>
+<ul>
+<li>$a_0 = (2.5,5.05)$: $\|b_2 - a_0\| = 2.98$</li>
+<li>$a_1 = (2.76,3.78)$: $\|b_2 - a_1\| = 1.98$</li>
+<li>$a_2 = (4.05,3.65)$: $\|b_2 - a_2\| = 0.93$</li>
+<li>$a_3 = (4.58,4.83)$: $\|b_2 - a_3\| = 1.99$</li>
+<li>$a_4 = (3.62,5.69)$: $\|b_2 - a_4\| = 2.98$</li>
+</ul>
+<p>$\min = 0.93$</p>
+<p><strong>$b_3 = (4.67, 4.12)$</strong></p>
+<ul>
+<li>$a_0 = (2.5,5.05)$: $\|b_3 - a_0\| = 2.36$</li>
+<li>$a_1 = (2.76,3.78)$: $\|b_3 - a_1\| = 1.94$</li>
+<li>$a_2 = (4.05,3.65)$: $\|b_3 - a_2\| = 0.78$</li>
+<li>$a_3 = (4.58,4.83)$: $\|b_3 - a_3\| = 0.72$</li>
+<li>$a_4 = (3.62,5.69)$: $\|b_3 - a_4\| = 1.89$</li>
+</ul>
+<p>$\min = 0.72$</p>
+<p><strong>$b_4 = (3.5, 4.68)$</strong></p>
+<ul>
+<li>$a_0 = (2.5,5.05)$: $\|b_4 - a_0\| = 1.07$</li>
+<li>$a_1 = (2.76,3.78)$: $\|b_4 - a_1\| = 1.17$</li>
+<li>$a_2 = (4.05,3.65)$: $\|b_4 - a_2\| = 1.17$</li>
+<li>$a_3 = (4.58,4.83)$: $\|b_4 - a_3\| = 1.09$</li>
+<li>$a_4 = (3.62,5.69)$: $\|b_4 - a_4\| = 1.02$</li>
+</ul>
+<p>$\min = 1.02$</p>
+<p>$$h(B \to A) = \max(0.16, 1.26, 0.93, 0.72, 1.02) = 1.26$$</p>
+<h4>Part (c) — $H(A,B)$</h4>
+<p>$$H(A,B) = \max\bigl(h(A \to B),\;h(B \to A)\bigr) = \max(1.07,\;1.26) = 1.26$$</p>
+</details>
+</section>
+<section class="selfcheck">
+<h2 id="self-check">Check your understanding</h2>
+<div class="sc-q" data-answer="1">
+<p class="sc-text">1. With the Euclidean distance as the similarity measure, the best template match is at the position with</p>
+<ul class="sc-options">
+<li><label><input type="radio" name="sc04_04_0" value="0"> the highest score</label></li>
+<li><label><input type="radio" name="sc04_04_0" value="1"> the lowest score</label></li>
+<li><label><input type="radio" name="sc04_04_0" value="2"> a score of exactly 1</label></li>
+<li><label><input type="radio" name="sc04_04_0" value="3"> the most edges</label></li>
+</ul>
+<p class="sc-feedback" hidden=""></p>
+<p class="sc-explain" hidden="">The distance is smallest where template and image agree; for correlation the best match is the highest score.</p>
+</div>
+<div class="sc-q" data-answer="1">
+<p class="sc-text">2. Why does plain cross-correlation produce false maxima?</p>
+<ul class="sc-options">
+<li><label><input type="radio" name="sc04_04_1" value="0"> Because it reverses the template</label></li>
+<li><label><input type="radio" name="sc04_04_1" value="1"> Because the score also rises wherever the image is bright, regardless of the pattern</label></li>
+<li><label><input type="radio" name="sc04_04_1" value="2"> Because it uses edges</label></li>
+<li><label><input type="radio" name="sc04_04_1" value="3"> Because the template is too small</label></li>
+</ul>
+<p class="sc-feedback" hidden=""></p>
+<p class="sc-explain" hidden="">Normalised cross-correlation subtracts the local mean and divides by the standard deviation to remove this effect.</p>
+</div>
+<div class="sc-q" data-answer="1">
+<p class="sc-text">3. Compared with plain correlation, normalised cross-correlation is</p>
+<ul class="sc-options">
+<li><label><input type="radio" name="sc04_04_2" value="0"> cheaper, since it needs no multiplication</label></li>
+<li><label><input type="radio" name="sc04_04_2" value="1"> more expensive, since the mean and standard deviation of the image region must be recomputed at every position</label></li>
+<li><label><input type="radio" name="sc04_04_2" value="2"> identical in cost</label></li>
+<li><label><input type="radio" name="sc04_04_2" value="3"> only defined for binary images</label></li>
+</ul>
+<p class="sc-feedback" hidden=""></p>
+<p class="sc-explain" hidden="">The template statistics are constant but the image statistics change with position.</p>
+</div>
+<div class="sc-q" data-answer="1">
+<p class="sc-text">4. Why is the shortest distance a poor measure of how well two shapes match?</p>
+<ul class="sc-options">
+<li><label><input type="radio" name="sc04_04_3" value="0"> It is expensive to compute</label></li>
+<li><label><input type="radio" name="sc04_04_3" value="1"> It can be the same for shapes that nearly coincide and shapes that barely touch</label></li>
+<li><label><input type="radio" name="sc04_04_3" value="2"> It is always zero</label></li>
+<li><label><input type="radio" name="sc04_04_3" value="3"> It needs colour information</label></li>
+</ul>
+<p class="sc-feedback" hidden=""></p>
+<p class="sc-explain" hidden="">A single nearest pair of points says nothing about the rest of the shapes.</p>
+</div>
+<div class="sc-q" data-answer="1">
+<p class="sc-text">5. In chamfer matching, the chamfer image is</p>
+<ul class="sc-options">
+<li><label><input type="radio" name="sc04_04_4" value="0"> the Canny edge map</label></li>
+<li><label><input type="radio" name="sc04_04_4" value="1"> the distance transform of the inverted edge image, giving each pixel its distance to the nearest edge</label></li>
+<li><label><input type="radio" name="sc04_04_4" value="2"> the template</label></li>
+<li><label><input type="radio" name="sc04_04_4" value="3"> the correlation map</label></li>
+</ul>
+<p class="sc-feedback" hidden=""></p>
+<p class="sc-explain" hidden="">Summing chamfer-image values under the template at each position gives the chamfer distance.</p>
+</div>
+<div class="sc-q" data-answer="1">
+<p class="sc-text">6. The directed Hausdorff distance h(A, B) is</p>
+<ul class="sc-options">
+<li><label><input type="radio" name="sc04_04_5" value="0"> the minimum over a of the minimum over b of the distance</label></li>
+<li><label><input type="radio" name="sc04_04_5" value="1"> the maximum over a of the minimum distance from a to any point of B</label></li>
+<li><label><input type="radio" name="sc04_04_5" value="2"> the average distance between A and B</label></li>
+<li><label><input type="radio" name="sc04_04_5" value="3"> always equal to h(B, A)</label></li>
+</ul>
+<p class="sc-feedback" hidden=""></p>
+<p class="sc-explain" hidden="">It is a max-min; the full Hausdorff distance is the larger of the two directed distances, which are not symmetric.</p>
+</div>
+<p><button type="button" class="sc-check">Check answers</button> <span class="sc-score"></span></p>
+</section>
+<section class="practice">
+<h2 id="practice">Practice questions</h2>
+<p>Question types from the CE6021 question bank that cover this lesson: <code>hausdorff</code>.</p>
+</section>
+<section class="credits">
+<h2 id="image-credits">Image credits</h2>
+<ul>
+<li><a href="https://commons.wikimedia.org/wiki/File:My_Favourite_Faces_(Imagicity_640).jpg">My Favourite Faces (Imagicity 640)</a>, Graham Crumb, <a href="https://creativecommons.org/licenses/by-sa/3.0">CC BY-SA 3.0</a></li>
+<li><a href="https://commons.wikimedia.org/wiki/File:Eastern_screech_owl_(44327).jpg">Eastern screech owl (44327)</a>, Rhododendrites, <a href="https://creativecommons.org/licenses/by-sa/4.0">CC BY-SA 4.0</a></li>
+<li><a href="https://commons.wikimedia.org/wiki/File:Chinese_-_Plate_with_Dutch_Couple_-_Walters_492419.jpg">Plate with Dutch Couple</a>, Walters Art Museum, Public domain</li>
+</ul>
+<p>Other figures are generated from synthetic data by the lesson engines.</p>
+</section>
+<nav class="pager"><a class="prev" href="04_03.html">← 04.03 Classifiers</a> 04.05 The Viola-Jones algorithm →</nav><footer class="foot">© Dr Tony Scanlan, University of Limerick. Figures generated by the CE6021 lesson builder.</footer></main></div></body></html>

@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>01.02 Image processing with convolution · CE6021 Machine Vision</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<script defer src="site.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="index.html">CE6021 Machine Vision</a>
+  <span class="crumb">Section 1: Digital images and filtering</span>
+</header>
+
+<div class="layout">
+<aside class="sidebar">
+  <nav class="toc">
+    <p class="toc-title">On this page</p>
+    <ul>
+    <li><a href="#learning-outcomes">Learning outcomes</a></li><li><a href="#linear-image-processing">Linear image processing</a></li><li><a href="#1d-convolution">1D convolution</a></li><li><a href="#convolution-and-cross-correlation">Convolution and cross-correlation</a></li><li><a href="#2d-convolution">2D convolution</a></li><li><a href="#zero-padding-and-output-size">Zero padding and output size</a></li><li><a href="#self-check">Check your understanding</a></li>
+    </ul>
+  </nav>
+  <nav class="section-nav">
+    <p class="toc-title">Section 1</p>
+    <ul>
+    
+      <li>
+        <a href="01_01.html">1. Digital images</a>
+      </li>
+    
+      <li class="current">
+        <span>2. Image processing with convolution</span>
+        
+      </li>
+    
+      <li>
+        <a href="01_03.html">3. Image sampling and interpolation</a>
+      </li>
+    
+      <li>
+        <a href="01_04.html">4. Linear filters, image noise and non-linear filters</a>
+      </li>
+    
+      <li>
+        <a href="01_05.html">5. Binary images and morphology</a>
+      </li>
+    
+      <li>
+        <a href="01_06.html">6. 1D Fourier series and the DFT</a>
+      </li>
+    
+      <li>
+        <a href="01_07.html">7. The 2D discrete Fourier transform</a>
+      </li>
+    
+    </ul>
+  </nav>
+</aside>
+
+<main class="lesson">
+  <p class="kicker">Lesson 01.02</p>
+  <h1>Image processing with convolution</h1>
+  <p class="summary">Linear filtering with kernels, the definition of convolution in 1D and 2D, how to do it by hand, and how to work out the output size for valid, same and full padding.</p>
+
+  <h2 id="learning-outcomes">Learning outcomes</h2>
+<p>After this lesson you should be able to:</p>
+<ul>
+<li>explain what makes a filter <strong>linear</strong> and what a <strong>kernel</strong> is;</li>
+<li>compute a <strong>1D convolution</strong> from its definition, including kernel reversal and shifting;</li>
+<li>perform a <strong>2D convolution</strong> by hand: flip the kernel, slide, multiply and sum;</li>
+<li>distinguish convolution from <strong>cross-correlation</strong> and say when they coincide;</li>
+<li>calculate the <strong>output size</strong> of a convolution for valid, same and full zero padding.</li>
+</ul>
+<h2 id="linear-image-processing">Linear image processing</h2>
+<p>Images are filtered to sharpen or blur them, or to find and enhance edges. The processing in this lesson is <strong>linear</strong>: each pixel of the output is a linear combination of the pixels in a small neighbourhood of the input. The weights of that combination are held in a <strong>kernel</strong>, a small array of numbers that represents the mathematical filter being applied. Convolving the kernel with the image produces the filtered image.</p>
+<figure class="lesson-fig" id="fig-kernel_gallery"><img src="figures/kernel_gallery.png" alt="The same greyscale image convolved with six small kernels. A kernel is a small array of weights; changing the weights turns the same operation into a blur, a sharpener or an edge detector. Edge outputs are shown as magnitudes."><figcaption><b>Figure 1.</b> The same greyscale image convolved with six small kernels. A kernel is a small array of weights; changing the weights turns the same operation into a blur, a sharpener or an edge detector. Edge outputs are shown as magnitudes. <span class="credit">Image: <a href="https://commons.wikimedia.org/wiki/File:Great_Sphinx_of_Giza_-_20080716a.jpg">Great Sphinx of Giza - 20080716a</a>, Barcex, <a href="http://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a>.</span></figcaption></figure>
+<h2 id="1d-convolution">1D convolution</h2>
+<p>What is convolution? It is the modification of one signal by another; equivalently, it is the result of passing a sequence through a <strong>linear time-invariant (LTI) system</strong>, which is exactly what filtering is. <em>Linear</em> means the filter obeys superposition; <em>time-invariant</em> means the kernel does not change as the input passes through it.</p>
+<p>For a sequence $x[n]$ and kernel $h[n]$ the convolution is</p>
+<p>$$(x * h)[n] = \sum_{k=-\infty}^{\infty} x[k]\, h[n-k]. \tag{1}$$</p>
+<p>Read on its own the equation is hard to interpret. Rewriting the kernel term as</p>
+<p>$$h[n-k] = h[-(k-n)] \tag{2}$$</p>
+<p>makes two operations visible. The minus sign outside the bracket <strong>reverses</strong> the kernel. The value of $n$ <strong>shifts</strong> it: a positive $n$ delays the reversed kernel (moves it right) and a negative $n$ advances it (moves it left).</p>
+<h3>Worked example: reversal and shift</h3>
+<p>Take a kernel $h[k]$ with values $1, 0, 2$ at $k = -1, 0, 1$ and zero elsewhere.</p>
+<ul>
+<li>$h[k-n]$ with $n = 1$: evaluating at $k = 0, 1, 2$ gives $h[-1], h[0], h[1] = 1, 0, 2$. The kernel is <strong>delayed</strong> by one sample.</li>
+<li>$h[-(k-n)]$ with $n = 1$: evaluating at $k = 0, 1, 2$ gives $h[1], h[0], h[-1] = 2, 0, 1$. The kernel is delayed by one sample <strong>and reversed</strong>.</li>
+</ul>
+<h3>Computing the full convolution</h3>
+<p>To evaluate equation (1) we write both sequences in terms of the dummy variable $k$. For each output index $n$ we form the reversed, shifted kernel $h[n-k]$, multiply it sample by sample with $x[k]$, and sum. Doing this for every $n$ amounts to <strong>sliding the reversed kernel along the sequence</strong> and recording one output value at each position. Verify a few of the values in the figure yourself.</p>
+<figure class="lesson-fig" id="fig-conv1d_slide"><img src="figures/conv1d_slide.png" alt="1D convolution of x[n] = [1, 2, 3, 1] (n = 0…3) with h[n] = [1, 0, 2] (n = −1…1). Top left: both sequences in the dummy variable k. Top second: the reversed kernel h[−k]. The remaining panels shift the reversed kernel to each output index n, multiply overlapping samples (red numbers) and sum."><div class="fig-interactive" hidden><div style="height:600px; width:100%;">                            <div id="7326f37b-4208-4959-8894-b6f67ba70d1a" class="plotly-graph-div" style="height:100%; width:100%;"></div>            <script>                window.PLOTLYENV=window.PLOTLYENV || {};                                if (document.getElementById("7326f37b-4208-4959-8894-b6f67ba70d1a")) {                    Plotly.newPlot(                        "7326f37b-4208-4959-8894-b6f67ba70d1a",                        [{"marker":{"color":"#6c757d"},"x":[-2,-1,0,1,2,3,4,5],"y":[0,0,1,2,3,1,0,0],"type":"bar","xaxis":"x","yaxis":"y"},{"marker":{"color":"#E69F00"},"x":[-2,-1,0,1,2,3,4,5],"y":[2,0,1,0,0,0,0,0],"type":"bar","xaxis":"x2","yaxis":"y2"},{"marker":{"color":"#D55E00"},"x":[-2,-1,0,1,2,3,4,5],"y":[0,0,1,0,0,0,0,0],"type":"bar","xaxis":"x3","yaxis":"y3"}],                        {"template":{"data":{"barpolar":[{"marker":{"line":{"color":"white","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"barpolar"}],"bar":[{"error_x":{"color":"#2a3f5f"},"error_y":{"color":"#2a3f5f"},"marker":{"line":{"color":"white","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"bar"}],"carpet":[{"aaxis":{"endlinecolor":"#2a3f5f","gridcolor":"#C8D4E3","linecolor":"#C8D4E3","minorgridcolor":"#C8D4E3","startlinecolor":"#2a3f5f"},"baxis":{"endlinecolor":"#2a3f5f","gridcolor":"#C8D4E3","linecolor":"#C8D4E3","minorgridcolor":"#C8D4E3","startlinecolor":"#2a3f5f"},"type":"carpet"}],"choropleth":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"choropleth"}],"contourcarpet":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"contourcarpet"}],"contour":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"contour"}],"heatmap":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"heatmap"}],"histogram2dcontour":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"histogram2dcontour"}],"histogram2d":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"histogram2d"}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"histogram"}],"mesh3d":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"mesh3d"}],"parcoords":[{"line":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"parcoords"}],"pie":[{"automargin":true,"type":"pie"}],"scatter3d":[{"line":{"colorbar":{"outlinewidth":0,"ticks":""}},"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatter3d"}],"scattercarpet":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattercarpet"}],"scattergeo":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattergeo"}],"scattergl":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattergl"}],"scattermap":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattermap"}],"scatterpolargl":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterpolargl"}],"scatterpolar":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterpolar"}],"scatter":[{"fillpattern":{"fillmode":"overlay","size":10,"solidity":0.2},"type":"scatter"}],"scatterternary":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterternary"}],"surface":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"surface"}],"table":[{"cells":{"fill":{"color":"#EBF0F8"},"line":{"color":"white"}},"header":{"fill":{"color":"#C8D4E3"},"line":{"color":"white"}},"type":"table"}]},"layout":{"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"autotypenumbers":"strict","coloraxis":{"colorbar":{"outlinewidth":0,"ticks":""}},"colorscale":{"diverging":[[0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1,"#276419"]],"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]},"colorway":["#636efa","#EF553B","#00cc96","#ab63fa","#FFA15A","#19d3f3","#FF6692","#B6E880","#FF97FF","#FECB52"],"font":{"color":"#2a3f5f"},"geo":{"bgcolor":"white","lakecolor":"white","landcolor":"white","showlakes":true,"showland":true,"subunitcolor":"#C8D4E3"},"hoverlabel":{"align":"left"},"hovermode":"closest","paper_bgcolor":"white","plot_bgcolor":"white","polar":{"angularaxis":{"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":""},"bgcolor":"white","radialaxis":{"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":""}},"scene":{"xaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"},"yaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"},"zaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"}},"shapedefaults":{"line":{"color":"#2a3f5f"}},"ternary":{"aaxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""},"baxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""},"bgcolor":"white","caxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""}},"title":{"x":0.05},"xaxis":{"automargin":true,"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":"","title":{"standoff":15},"zerolinecolor":"#EBF0F8","zerolinewidth":2},"yaxis":{"automargin":true,"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":"","title":{"standoff":15},"zerolinecolor":"#EBF0F8","zerolinewidth":2}}},"xaxis":{"anchor":"y","domain":[0.0,1.0],"matches":"x3","showticklabels":false},"yaxis":{"anchor":"x","domain":[0.72,1.0],"range":[0,3.5]},"xaxis2":{"anchor":"y2","domain":[0.0,1.0],"matches":"x3","showticklabels":false},"yaxis2":{"anchor":"x2","domain":[0.36,0.6399999999999999],"range":[0,3.5]},"xaxis3":{"anchor":"y3","domain":[0.0,1.0],"title":{"text":"k"},"tickmode":"array","tickvals":[-2,-1,0,1,2,3,4,5]},"yaxis3":{"anchor":"x3","domain":[0.0,0.27999999999999997],"range":[-0.2,6.5]},"annotations":[{"font":{"size":16},"showarrow":false,"text":"x[k]","x":0.5,"xanchor":"center","xref":"paper","y":1.0,"yanchor":"bottom","yref":"paper"},{"font":{"size":16},"showarrow":false,"text":"reversed and shifted kernel h[n−k]","x":0.5,"xanchor":"center","xref":"paper","y":0.6399999999999999,"yanchor":"bottom","yref":"paper"},{"font":{"size":16},"showarrow":false,"text":"products x[k]·h[n−k]","x":0.5,"xanchor":"center","xref":"paper","y":0.27999999999999997,"yanchor":"bottom","yref":"paper"}],"sliders":[{"currentvalue":{"prefix":"n = "},"len":0.9,"pad":{"t":30},"steps":[{"args":[["-1"],{"mode":"immediate","frame":{"duration":0,"redraw":true},"transition":{"duration":0}}],"label":"-1","method":"animate"},{"args":[["0"],{"mode":"immediate","frame":{"duration":0,"redraw":true},"transition":{"duration":0}}],"label":"0","method":"animate"},{"args":[["1"],{"mode":"immediate","frame":{"duration":0,"redraw":true},"transition":{"duration":0}}],"label":"1","method":"animate"},{"args":[["2"],{"mode":"immediate","frame":{"duration":0,"redraw":true},"transition":{"duration":0}}],"label":"2","method":"animate"},{"args":[["3"],{"mode":"immediate","frame":{"duration":0,"redraw":true},"transition":{"duration":0}}],"label":"3","method":"animate"},{"args":[["4"],{"mode":"immediate","frame":{"duration":0,"redraw":true},"transition":{"duration":0}}],"label":"4","method":"animate"}],"x":0.05}],"showlegend":false,"title":{"text":"n = -1:  (x∗h)[-1] = Σ x[k]·h[-1−k] = 1"},"margin":{"l":40,"r":20,"t":50,"b":40},"font":{"family":"system-ui, sans-serif","size":13},"height":600},                        {"displaylogo": false, "responsive": true}                    ).then(function(){
+                            Plotly.addFrames('7326f37b-4208-4959-8894-b6f67ba70d1a', [{"data":[{"marker":{"color":"#6c757d"},"x":[-2,-1,0,1,2,3,4,5],"y":[0,0,1,2,3,1,0,0],"type":"bar"},{"marker":{"color":"#E69F00"},"x":[-2,-1,0,1,2,3,4,5],"y":[2,0,1,0,0,0,0,0],"type":"bar"},{"marker":{"color":"#D55E00"},"x":[-2,-1,0,1,2,3,4,5],"y":[0,0,1,0,0,0,0,0],"type":"bar"}],"layout":{"title":{"text":"n = -1:  (x∗h)[-1] = Σ x[k]·h[-1−k] = 1"}},"name":"-1","traces":[0,1,2]},{"data":[{"marker":{"color":"#6c757d"},"x":[-2,-1,0,1,2,3,4,5],"y":[0,0,1,2,3,1,0,0],"type":"bar"},{"marker":{"color":"#E69F00"},"x":[-2,-1,0,1,2,3,4,5],"y":[0,2,0,1,0,0,0,0],"type":"bar"},{"marker":{"color":"#D55E00"},"x":[-2,-1,0,1,2,3,4,5],"y":[0,0,0,2,0,0,0,0],"type":"bar"}],"layout":{"title":{"text":"n = 0:  (x∗h)[0] = Σ x[k]·h[0−k] = 2"}},"name":"0","traces":[0,1,2]},{"data":[{"marker":{"color":"#6c757d"},"x":[-2,-1,0,1,2,3,4,5],"y":[0,0,1,2,3,1,0,0],"type":"bar"},{"marker":{"color":"#E69F00"},"x":[-2,-1,0,1,2,3,4,5],"y":[0,0,2,0,1,0,0,0],"type":"bar"},{"marker":{"color":"#D55E00"},"x":[-2,-1,0,1,2,3,4,5],"y":[0,0,2,0,3,0,0,0],"type":"bar"}],"layout":{"title":{"text":"n = 1:  (x∗h)[1] = Σ x[k]·h[1−k] = 5"}},"name":"1","traces":[0,1,2]},{"data":[{"marker":{"color":"#6c757d"},"x":[-2,-1,0,1,2,3,4,5],"y":[0,0,1,2,3,1,0,0],"type":"bar"},{"marker":{"color":"#E69F00"},"x":[-2,-1,0,1,2,3,4,5],"y":[0,0,0,2,0,1,0,0],"type":"bar"},{"marker":{"color":"#D55E00"},"x":[-2,-1,0,1,2,3,4,5],"y":[0,0,0,4,0,1,0,0],"type":"bar"}],"layout":{"title":{"text":"n = 2:  (x∗h)[2] = Σ x[k]·h[2−k] = 5"}},"name":"2","traces":[0,1,2]},{"data":[{"marker":{"color":"#6c757d"},"x":[-2,-1,0,1,2,3,4,5],"y":[0,0,1,2,3,1,0,0],"type":"bar"},{"marker":{"color":"#E69F00"},"x":[-2,-1,0,1,2,3,4,5],"y":[0,0,0,0,2,0,1,0],"type":"bar"},{"marker":{"color":"#D55E00"},"x":[-2,-1,0,1,2,3,4,5],"y":[0,0,0,0,6,0,0,0],"type":"bar"}],"layout":{"title":{"text":"n = 3:  (x∗h)[3] = Σ x[k]·h[3−k] = 6"}},"name":"3","traces":[0,1,2]},{"data":[{"marker":{"color":"#6c757d"},"x":[-2,-1,0,1,2,3,4,5],"y":[0,0,1,2,3,1,0,0],"type":"bar"},{"marker":{"color":"#E69F00"},"x":[-2,-1,0,1,2,3,4,5],"y":[0,0,0,0,0,2,0,1],"type":"bar"},{"marker":{"color":"#D55E00"},"x":[-2,-1,0,1,2,3,4,5],"y":[0,0,0,0,0,2,0,0],"type":"bar"}],"layout":{"title":{"text":"n = 4:  (x∗h)[4] = Σ x[k]·h[4−k] = 2"}},"name":"4","traces":[0,1,2]}]);
+                        }).then(function(){
+                            Plotly.animate('7326f37b-4208-4959-8894-b6f67ba70d1a', null);
+                        })                };            </script>        </div></div><figcaption><b>Figure 2.</b> 1D convolution of x[n] = [1, 2, 3, 1] (n = 0…3) with h[n] = [1, 0, 2] (n = −1…1). Top left: both sequences in the dummy variable k. Top second: the reversed kernel h[−k]. The remaining panels shift the reversed kernel to each output index n, multiply overlapping samples (red numbers) and sum. <button class="fig-toggle" data-target="fig-conv1d_slide" type="button">Interactive version</button></figcaption></figure>
+<section class="worked-example" id="ex-conv1d-3"><h4>Worked example 1: 1D Convolution (Mathematical)</h4><div class="example-q"><p>Given the 1D convolution equation</p>
+<p>$$
+(x * h)[n] = \sum_{k=-\infty}^{\infty} x[k]\, h[n-k]
+$$</p>
+<p>Perform convolution between the sequence $x[n] = [2, -3, -2]$ and the kernel $h[n] = [-2, -2, 2]$ defined at $n \in [-1, 0, 1]$.</p>
+<p>Give your answer as a $1 \times 5$ matrix where the elements of the matrix are the result of convolution $(x * h)[n]$ for $n \in [-2, -1, 0, 1, 2]$:</p>
+</div><details class="example-sol"><summary>Show the solution</summary><p><strong>Step 1:</strong> Rewrite input and kernel in terms of the dummy variable $k$:</p>
+<p>$x[k] = [2, -3, -2]$, $k \in [-1, 0, 1]$</p>
+<p>$h[k] = [-2, -2, 2]$, $k \in [-1, 0, 1]$</p>
+<p>Both sequences are zero outside their defined ranges.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>$k=-3$</th>
+<th>$k=-2$</th>
+<th>$k=-1$</th>
+<th>$k=0$</th>
+<th>$k=1$</th>
+<th>$k=2$</th>
+<th>$k=3$</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>$x[k]$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$2$</td>
+<td>$-3$</td>
+<td>$-2$</td>
+<td>$0$</td>
+<td>$0$</td>
+</tr>
+</tbody>
+</table>
+<p>The output range is $n \in [-2, -1, 0, 1, 2]$. We evaluate over $k \in [-3, -2, -1, 0, 1, 2, 3]$.</p>
+<p><strong>Step 2: $n = -2$</strong></p>
+<p>Reversed/shifted kernel: $h(n-k) = h(-2-k)$</p>
+<ul>
+<li>$k = -4$: $h(-2 - (-4)) = h(2) = 0$ (outside defined range, so = 0)</li>
+<li>$k = -3$: $h(-2 - (-3)) = h(1) = 2$</li>
+<li>$k = -2$: $h(-2 - (-2)) = h(0) = -2$</li>
+<li>$k = -1$: $h(-2 - (-1)) = h(-1) = -2$</li>
+<li>$k = 0$: $h(-2 - (0)) = h(-2) = 0$ (outside defined range, so = 0)</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>$k=-3$</th>
+<th>$k=-2$</th>
+<th>$k=-1$</th>
+<th>$k=0$</th>
+<th>$k=1$</th>
+<th>$k=2$</th>
+<th>$k=3$</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>$x[k]$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$2$</td>
+<td>$-3$</td>
+<td>$-2$</td>
+<td>$0$</td>
+<td>$0$</td>
+</tr>
+<tr>
+<td>$h[-2-k]$</td>
+<td>$2$</td>
+<td>$-2$</td>
+<td>$-2$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$0$</td>
+</tr>
+</tbody>
+</table>
+<p>$$(x * h)[-2] = \sum_{k=-3}^{1} x[k]\,h[-2-k] = 0 \cdot 2 + 0 \cdot (-2) + 2 \cdot (-2) + (-3) \cdot 0 + (-2) \cdot 0 = -4$$</p>
+<p><strong>Step 3: $n = -1$</strong></p>
+<p>Reversed/shifted kernel: $h(n-k) = h(-1-k)$</p>
+<ul>
+<li>$k = -3$: $h(-1 - (-3)) = h(2) = 0$ (outside defined range, so = 0)</li>
+<li>$k = -2$: $h(-1 - (-2)) = h(1) = 2$</li>
+<li>$k = -1$: $h(-1 - (-1)) = h(0) = -2$</li>
+<li>$k = 0$: $h(-1 - (0)) = h(-1) = -2$</li>
+<li>$k = 1$: $h(-1 - (1)) = h(-2) = 0$ (outside defined range, so = 0)</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>$k=-3$</th>
+<th>$k=-2$</th>
+<th>$k=-1$</th>
+<th>$k=0$</th>
+<th>$k=1$</th>
+<th>$k=2$</th>
+<th>$k=3$</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>$x[k]$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$2$</td>
+<td>$-3$</td>
+<td>$-2$</td>
+<td>$0$</td>
+<td>$0$</td>
+</tr>
+<tr>
+<td>$h[-1-k]$</td>
+<td>$0$</td>
+<td>$2$</td>
+<td>$-2$</td>
+<td>$-2$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$0$</td>
+</tr>
+</tbody>
+</table>
+<p>$$(x * h)[-1] = \sum_{k=-2}^{1} x[k]\,h[-1-k] = 0 \cdot 2 + 2 \cdot (-2) + (-3) \cdot (-2) + (-2) \cdot 0 = 2$$</p>
+<p><strong>Step 4: $n = 0$</strong></p>
+<p>Reversed/shifted kernel: $h(n-k) = h(0-k)$</p>
+<ul>
+<li>$k = -2$: $h(0 - (-2)) = h(2) = 0$ (outside defined range, so = 0)</li>
+<li>$k = -1$: $h(0 - (-1)) = h(1) = 2$</li>
+<li>$k = 0$: $h(0 - (0)) = h(0) = -2$</li>
+<li>$k = 1$: $h(0 - (1)) = h(-1) = -2$</li>
+<li>$k = 2$: $h(0 - (2)) = h(-2) = 0$ (outside defined range, so = 0)</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>$k=-3$</th>
+<th>$k=-2$</th>
+<th>$k=-1$</th>
+<th>$k=0$</th>
+<th>$k=1$</th>
+<th>$k=2$</th>
+<th>$k=3$</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>$x[k]$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$2$</td>
+<td>$-3$</td>
+<td>$-2$</td>
+<td>$0$</td>
+<td>$0$</td>
+</tr>
+<tr>
+<td>$h[-k]$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$2$</td>
+<td>$-2$</td>
+<td>$-2$</td>
+<td>$0$</td>
+<td>$0$</td>
+</tr>
+</tbody>
+</table>
+<p>$$(x * h)[0] = \sum_{k=-1}^{1} x[k]\,h[0-k] = 2 \cdot 2 + (-3) \cdot (-2) + (-2) \cdot (-2) = 14$$</p>
+<p><strong>Step 5: $n = 1$</strong></p>
+<p>Reversed/shifted kernel: $h(n-k) = h(1-k)$</p>
+<ul>
+<li>$k = -1$: $h(1 - (-1)) = h(2) = 0$ (outside defined range, so = 0)</li>
+<li>$k = 0$: $h(1 - (0)) = h(1) = 2$</li>
+<li>$k = 1$: $h(1 - (1)) = h(0) = -2$</li>
+<li>$k = 2$: $h(1 - (2)) = h(-1) = -2$</li>
+<li>$k = 3$: $h(1 - (3)) = h(-2) = 0$ (outside defined range, so = 0)</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>$k=-3$</th>
+<th>$k=-2$</th>
+<th>$k=-1$</th>
+<th>$k=0$</th>
+<th>$k=1$</th>
+<th>$k=2$</th>
+<th>$k=3$</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>$x[k]$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$2$</td>
+<td>$-3$</td>
+<td>$-2$</td>
+<td>$0$</td>
+<td>$0$</td>
+</tr>
+<tr>
+<td>$h[1-k]$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$2$</td>
+<td>$-2$</td>
+<td>$-2$</td>
+<td>$0$</td>
+</tr>
+</tbody>
+</table>
+<p>$$(x * h)[1] = \sum_{k=-1}^{2} x[k]\,h[1-k] = 2 \cdot 0 + (-3) \cdot 2 + (-2) \cdot (-2) + 0 \cdot (-2) = -2$$</p>
+<p><strong>Step 6: $n = 2$</strong></p>
+<p>Reversed/shifted kernel: $h(n-k) = h(2-k)$</p>
+<ul>
+<li>$k = 0$: $h(2 - (0)) = h(2) = 0$ (outside defined range, so = 0)</li>
+<li>$k = 1$: $h(2 - (1)) = h(1) = 2$</li>
+<li>$k = 2$: $h(2 - (2)) = h(0) = -2$</li>
+<li>$k = 3$: $h(2 - (3)) = h(-1) = -2$</li>
+<li>$k = 4$: $h(2 - (4)) = h(-2) = 0$ (outside defined range, so = 0)</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>$k=-3$</th>
+<th>$k=-2$</th>
+<th>$k=-1$</th>
+<th>$k=0$</th>
+<th>$k=1$</th>
+<th>$k=2$</th>
+<th>$k=3$</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>$x[k]$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$2$</td>
+<td>$-3$</td>
+<td>$-2$</td>
+<td>$0$</td>
+<td>$0$</td>
+</tr>
+<tr>
+<td>$h[2-k]$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$2$</td>
+<td>$-2$</td>
+<td>$-2$</td>
+</tr>
+</tbody>
+</table>
+<p>$$(x * h)[2] = \sum_{k=-1}^{3} x[k]\,h[2-k] = 2 \cdot 0 + (-3) \cdot 0 + (-2) \cdot 2 + 0 \cdot (-2) + 0 \cdot (-2) = -4$$</p>
+<p><strong>Summary table:</strong></p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>$k=-3$</th>
+<th>$k=-2$</th>
+<th>$k=-1$</th>
+<th>$k=0$</th>
+<th>$k=1$</th>
+<th>$k=2$</th>
+<th>$k=3$</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>$x[k]$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$2$</td>
+<td>$-3$</td>
+<td>$-2$</td>
+<td>$0$</td>
+<td>$0$</td>
+</tr>
+<tr>
+<td>$h[-2-k]$</td>
+<td>$2$</td>
+<td>$-2$</td>
+<td>$-2$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$0$</td>
+</tr>
+<tr>
+<td>$h[-1-k]$</td>
+<td>$0$</td>
+<td>$2$</td>
+<td>$-2$</td>
+<td>$-2$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$0$</td>
+</tr>
+<tr>
+<td>$h[-k]$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$2$</td>
+<td>$-2$</td>
+<td>$-2$</td>
+<td>$0$</td>
+<td>$0$</td>
+</tr>
+<tr>
+<td>$h[1-k]$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$2$</td>
+<td>$-2$</td>
+<td>$-2$</td>
+<td>$0$</td>
+</tr>
+<tr>
+<td>$h[2-k]$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$0$</td>
+<td>$2$</td>
+<td>$-2$</td>
+<td>$-2$</td>
+</tr>
+<tr>
+<td>$(x * h)[n]$</td>
+<td></td>
+<td>$-4$</td>
+<td>$2$</td>
+<td>$14$</td>
+<td>$-2$</td>
+<td>$-4$</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Result:</strong> $(x * h)[n] = \begin{pmatrix}-4 &amp; 2 &amp; 14 &amp; -2 &amp; -4\end{pmatrix}$ for $n \in [-2, -1, 0, 1, 2]$</p>
+</details></section>
+<h2 id="convolution-and-cross-correlation">Convolution and cross-correlation</h2>
+<p>If the kernel is <strong>not</strong> reversed we obtain a different operation, <strong>cross-correlation</strong>:</p>
+<p>$$(x \star h)[n] = \sum_{k} x[k]\, h[k-n].$$</p>
+<p>Cross-correlation measures the <em>similarity</em> of two signals, whereas convolution is the <em>modification</em> of one signal by another. When the kernel is symmetric, $h[k] = h[-k]$, reversal changes nothing and the two operations give identical results. Many kernels in image processing are symmetric, which is why the distinction is often blurred in practice.</p>
+<h2 id="2d-convolution">2D convolution</h2>
+<p>For images the same idea applies in two dimensions. With an image $x$ and kernel $h$,</p>
+<p>$$(x * h)[m, n] = \sum_{i=-\infty}^{\infty} \sum_{j=-\infty}^{\infty} x[i, j]\, h[m-i,\, n-j]. \tag{3}$$</p>
+<p>The minus signs inside the brackets reverse the kernel along <strong>both</strong> axes; $[m, n]$ is the position of the output pixel and also the shift applied to the reversed kernel. At each shift the overlapping values are multiplied and summed. The infinite sums simply guarantee that every position where the kernel overlaps the image is included.</p>
+<h3>Symmetric kernels</h3>
+<p>Reversing a 2D kernel means reversing the order of its rows <em>and</em> the order of its columns (the order in which you do the two does not matter). A <strong>symmetric kernel</strong> is unchanged by this, so once again convolution and cross-correlation coincide.</p>
+<figure class="lesson-fig" id="fig-corr_vs_conv"><img src="figures/corr_vs_conv.png" alt="Cross-correlation slides the kernel as given; convolution first flips it in both axes. With an asymmetric kernel (top) the two results differ. With a symmetric kernel (bottom) the flip changes nothing and the results are identical, which is why most image processing libraries quietly compute correlation."><figcaption><b>Figure 3.</b> Cross-correlation slides the kernel as given; convolution first flips it in both axes. With an asymmetric kernel (top) the two results differ. With a symmetric kernel (bottom) the flip changes nothing and the results are identical, which is why most image processing libraries quietly compute correlation.</figcaption></figure>
+<h3>Doing 2D convolution by hand</h3>
+<p>The manual procedure is straightforward:</p>
+<ol>
+<li><strong>Flip the kernel</strong>: reverse each row (horizontal flip) then reverse each column (vertical flip).</li>
+<li><strong>Pad</strong> the image with a ring of zeros so the kernel can be placed where it just overlaps the image.</li>
+<li><strong>Slide</strong> the flipped kernel to every position, <strong>multiply</strong> element-wise with the pixels underneath and <strong>sum</strong> to give one output pixel.</li>
+</ol>
+<figure class="lesson-fig" id="fig-conv2d_flip_slide"><img src="figures/conv2d_flip_slide.png" alt="2D convolution of a 4 × 4 image with a 3 × 3 kernel using one ring of zero padding (&quot;same&quot; output size). (a) The kernel is flipped horizontally and vertically to give (b). (c) The flipped kernel is placed over each 3 × 3 window of the padded image, (d) multiplied element-wise and summed, giving one output pixel (e)."><div class="fig-interactive" hidden><div style="height:430px; width:100%;">                            <div id="11889069-65db-4ab4-8805-d4cc26a4367c" class="plotly-graph-div" style="height:100%; width:100%;"></div>            <script>                window.PLOTLYENV=window.PLOTLYENV || {};                                if (document.getElementById("11889069-65db-4ab4-8805-d4cc26a4367c")) {                    Plotly.newPlot(                        "11889069-65db-4ab4-8805-d4cc26a4367c",                        [{"colorscale":[[0.0,"rgb(247,251,255)"],[0.125,"rgb(222,235,247)"],[0.25,"rgb(198,219,239)"],[0.375,"rgb(158,202,225)"],[0.5,"rgb(107,174,214)"],[0.625,"rgb(66,146,198)"],[0.75,"rgb(33,113,181)"],[0.875,"rgb(8,81,156)"],[1.0,"rgb(8,48,107)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"type":"heatmap","xaxis":"x","yaxis":"y"},{"colorscale":[[0.0,"rgb(252,251,253)"],[0.125,"rgb(239,237,245)"],[0.25,"rgb(218,218,235)"],[0.375,"rgb(188,189,220)"],[0.5,"rgb(158,154,200)"],[0.625,"rgb(128,125,186)"],[0.75,"rgb(106,81,163)"],[0.875,"rgb(84,39,143)"],[1.0,"rgb(63,0,125)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAAAAAEAAAB","shape":"3, 3"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAAAAAEAAAB","shape":"3, 3"},"zmid":0,"type":"heatmap","xaxis":"x2","yaxis":"y2"},{"colorscale":[[0.0,"rgb(247,252,245)"],[0.125,"rgb(229,245,224)"],[0.25,"rgb(199,233,192)"],[0.375,"rgb(161,217,155)"],[0.5,"rgb(116,196,118)"],[0.625,"rgb(65,171,93)"],[0.75,"rgb(35,139,69)"],[0.875,"rgb(0,109,44)"],[1.0,"rgb(0,68,27)"]],"showscale":false,"text":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"texttemplate":"%{text}","z":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"zmid":0,"type":"heatmap","xaxis":"x3","yaxis":"y3"}],                        {"template":{"data":{"barpolar":[{"marker":{"line":{"color":"white","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"barpolar"}],"bar":[{"error_x":{"color":"#2a3f5f"},"error_y":{"color":"#2a3f5f"},"marker":{"line":{"color":"white","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"bar"}],"carpet":[{"aaxis":{"endlinecolor":"#2a3f5f","gridcolor":"#C8D4E3","linecolor":"#C8D4E3","minorgridcolor":"#C8D4E3","startlinecolor":"#2a3f5f"},"baxis":{"endlinecolor":"#2a3f5f","gridcolor":"#C8D4E3","linecolor":"#C8D4E3","minorgridcolor":"#C8D4E3","startlinecolor":"#2a3f5f"},"type":"carpet"}],"choropleth":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"choropleth"}],"contourcarpet":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"contourcarpet"}],"contour":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"contour"}],"heatmap":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"heatmap"}],"histogram2dcontour":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"histogram2dcontour"}],"histogram2d":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"histogram2d"}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"histogram"}],"mesh3d":[{"colorbar":{"outlinewidth":0,"ticks":""},"type":"mesh3d"}],"parcoords":[{"line":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"parcoords"}],"pie":[{"automargin":true,"type":"pie"}],"scatter3d":[{"line":{"colorbar":{"outlinewidth":0,"ticks":""}},"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatter3d"}],"scattercarpet":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattercarpet"}],"scattergeo":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattergeo"}],"scattergl":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattergl"}],"scattermap":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scattermap"}],"scatterpolargl":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterpolargl"}],"scatterpolar":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterpolar"}],"scatter":[{"fillpattern":{"fillmode":"overlay","size":10,"solidity":0.2},"type":"scatter"}],"scatterternary":[{"marker":{"colorbar":{"outlinewidth":0,"ticks":""}},"type":"scatterternary"}],"surface":[{"colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"type":"surface"}],"table":[{"cells":{"fill":{"color":"#EBF0F8"},"line":{"color":"white"}},"header":{"fill":{"color":"#C8D4E3"},"line":{"color":"white"}},"type":"table"}]},"layout":{"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"autotypenumbers":"strict","coloraxis":{"colorbar":{"outlinewidth":0,"ticks":""}},"colorscale":{"diverging":[[0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1,"#276419"]],"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]},"colorway":["#636efa","#EF553B","#00cc96","#ab63fa","#FFA15A","#19d3f3","#FF6692","#B6E880","#FF97FF","#FECB52"],"font":{"color":"#2a3f5f"},"geo":{"bgcolor":"white","lakecolor":"white","landcolor":"white","showlakes":true,"showland":true,"subunitcolor":"#C8D4E3"},"hoverlabel":{"align":"left"},"hovermode":"closest","paper_bgcolor":"white","plot_bgcolor":"white","polar":{"angularaxis":{"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":""},"bgcolor":"white","radialaxis":{"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":""}},"scene":{"xaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"},"yaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"},"zaxis":{"backgroundcolor":"white","gridcolor":"#DFE8F3","gridwidth":2,"linecolor":"#EBF0F8","showbackground":true,"ticks":"","zerolinecolor":"#EBF0F8"}},"shapedefaults":{"line":{"color":"#2a3f5f"}},"ternary":{"aaxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""},"baxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""},"bgcolor":"white","caxis":{"gridcolor":"#DFE8F3","linecolor":"#A2B1C6","ticks":""}},"title":{"x":0.05},"xaxis":{"automargin":true,"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":"","title":{"standoff":15},"zerolinecolor":"#EBF0F8","zerolinewidth":2},"yaxis":{"automargin":true,"gridcolor":"#EBF0F8","linecolor":"#EBF0F8","ticks":"","title":{"standoff":15},"zerolinecolor":"#EBF0F8","zerolinewidth":2}}},"xaxis":{"anchor":"y","domain":[0.0,0.364],"showticklabels":false},"yaxis":{"anchor":"x","domain":[0.0,1.0],"autorange":"reversed","showticklabels":false},"xaxis2":{"anchor":"y2","domain":[0.43066666666666664,0.6819999999999999],"showticklabels":false},"yaxis2":{"anchor":"x2","domain":[0.0,1.0],"autorange":"reversed","showticklabels":false},"xaxis3":{"anchor":"y3","domain":[0.7486666666666666,0.9999999999999999],"showticklabels":false},"yaxis3":{"anchor":"x3","domain":[0.0,1.0],"autorange":"reversed","showticklabels":false},"annotations":[{"font":{"size":16},"showarrow":false,"text":"zero-padded image (window in red)","x":0.182,"xanchor":"center","xref":"paper","y":1.0,"yanchor":"bottom","yref":"paper"},{"font":{"size":16},"showarrow":false,"text":"patch × flipped kernel","x":0.5563333333333333,"xanchor":"center","xref":"paper","y":1.0,"yanchor":"bottom","yref":"paper"},{"font":{"size":16},"showarrow":false,"text":"output","x":0.8743333333333332,"xanchor":"center","xref":"paper","y":1.0,"yanchor":"bottom","yref":"paper"}],"sliders":[{"currentvalue":{"prefix":"position "},"len":0.9,"pad":{"t":30},"steps":[{"args":[["(0,0)"],{"mode":"immediate","frame":{"duration":0,"redraw":true},"transition":{"duration":0}}],"label":"(0,0)","method":"animate"},{"args":[["(0,1)"],{"mode":"immediate","frame":{"duration":0,"redraw":true},"transition":{"duration":0}}],"label":"(0,1)","method":"animate"},{"args":[["(0,2)"],{"mode":"immediate","frame":{"duration":0,"redraw":true},"transition":{"duration":0}}],"label":"(0,2)","method":"animate"},{"args":[["(0,3)"],{"mode":"immediate","frame":{"duration":0,"redraw":true},"transition":{"duration":0}}],"label":"(0,3)","method":"animate"},{"args":[["(1,0)"],{"mode":"immediate","frame":{"duration":0,"redraw":true},"transition":{"duration":0}}],"label":"(1,0)","method":"animate"},{"args":[["(1,1)"],{"mode":"immediate","frame":{"duration":0,"redraw":true},"transition":{"duration":0}}],"label":"(1,1)","method":"animate"},{"args":[["(1,2)"],{"mode":"immediate","frame":{"duration":0,"redraw":true},"transition":{"duration":0}}],"label":"(1,2)","method":"animate"},{"args":[["(1,3)"],{"mode":"immediate","frame":{"duration":0,"redraw":true},"transition":{"duration":0}}],"label":"(1,3)","method":"animate"},{"args":[["(2,0)"],{"mode":"immediate","frame":{"duration":0,"redraw":true},"transition":{"duration":0}}],"label":"(2,0)","method":"animate"},{"args":[["(2,1)"],{"mode":"immediate","frame":{"duration":0,"redraw":true},"transition":{"duration":0}}],"label":"(2,1)","method":"animate"},{"args":[["(2,2)"],{"mode":"immediate","frame":{"duration":0,"redraw":true},"transition":{"duration":0}}],"label":"(2,2)","method":"animate"},{"args":[["(2,3)"],{"mode":"immediate","frame":{"duration":0,"redraw":true},"transition":{"duration":0}}],"label":"(2,3)","method":"animate"},{"args":[["(3,0)"],{"mode":"immediate","frame":{"duration":0,"redraw":true},"transition":{"duration":0}}],"label":"(3,0)","method":"animate"},{"args":[["(3,1)"],{"mode":"immediate","frame":{"duration":0,"redraw":true},"transition":{"duration":0}}],"label":"(3,1)","method":"animate"},{"args":[["(3,2)"],{"mode":"immediate","frame":{"duration":0,"redraw":true},"transition":{"duration":0}}],"label":"(3,2)","method":"animate"},{"args":[["(3,3)"],{"mode":"immediate","frame":{"duration":0,"redraw":true},"transition":{"duration":0}}],"label":"(3,3)","method":"animate"}],"x":0.05}],"shapes":[{"line":{"color":"#D55E00","width":3},"type":"rect","x0":-0.5,"x1":2.5,"xref":"x","y0":-0.5,"y1":2.5,"yref":"y"}],"title":{"text":"output(0,0) = 0·-1 + 0·1 + 0·-2 + 2·2 + 0·-1 + 1·1 = 5"},"margin":{"l":40,"r":20,"t":50,"b":40},"font":{"family":"system-ui, sans-serif","size":13},"height":430},                        {"displaylogo": false, "responsive": true}                    ).then(function(){
+                            Plotly.addFrames('11889069-65db-4ab4-8805-d4cc26a4367c', [{"data":[{"colorscale":[[0.0,"rgb(247,251,255)"],[0.125,"rgb(222,235,247)"],[0.25,"rgb(198,219,239)"],[0.375,"rgb(158,202,225)"],[0.5,"rgb(107,174,214)"],[0.625,"rgb(66,146,198)"],[0.75,"rgb(33,113,181)"],[0.875,"rgb(8,81,156)"],[1.0,"rgb(8,48,107)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"type":"heatmap"},{"colorscale":[[0.0,"rgb(252,251,253)"],[0.125,"rgb(239,237,245)"],[0.25,"rgb(218,218,235)"],[0.375,"rgb(188,189,220)"],[0.5,"rgb(158,154,200)"],[0.625,"rgb(128,125,186)"],[0.75,"rgb(106,81,163)"],[0.875,"rgb(84,39,143)"],[1.0,"rgb(63,0,125)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAAAAAEAAAB","shape":"3, 3"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAAAAAEAAAB","shape":"3, 3"},"zmid":0,"type":"heatmap"},{"colorscale":[[0.0,"rgb(247,252,245)"],[0.125,"rgb(229,245,224)"],[0.25,"rgb(199,233,192)"],[0.375,"rgb(161,217,155)"],[0.5,"rgb(116,196,118)"],[0.625,"rgb(65,171,93)"],[0.75,"rgb(35,139,69)"],[0.875,"rgb(0,109,44)"],[1.0,"rgb(0,68,27)"]],"showscale":false,"text":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"texttemplate":"%{text}","z":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"zmid":0,"type":"heatmap"}],"layout":{"shapes":[{"line":{"color":"#D55E00","width":3},"type":"rect","x0":-0.5,"x1":2.5,"xref":"x","y0":-0.5,"y1":2.5,"yref":"y"}],"title":{"text":"output(0,0) = 0·-1 + 0·1 + 0·-2 + 2·2 + 0·-1 + 1·1 = 5"}},"name":"(0,0)","traces":[0,1,2]},{"data":[{"colorscale":[[0.0,"rgb(247,251,255)"],[0.125,"rgb(222,235,247)"],[0.25,"rgb(198,219,239)"],[0.375,"rgb(158,202,225)"],[0.5,"rgb(107,174,214)"],[0.625,"rgb(66,146,198)"],[0.75,"rgb(33,113,181)"],[0.875,"rgb(8,81,156)"],[1.0,"rgb(8,48,107)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"type":"heatmap"},{"colorscale":[[0.0,"rgb(252,251,253)"],[0.125,"rgb(239,237,245)"],[0.25,"rgb(218,218,235)"],[0.375,"rgb(188,189,220)"],[0.5,"rgb(158,154,200)"],[0.625,"rgb(128,125,186)"],[0.75,"rgb(106,81,163)"],[0.875,"rgb(84,39,143)"],[1.0,"rgb(63,0,125)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAA\u002fgAAAAAD","shape":"3, 3"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAA\u002fgAAAAAD","shape":"3, 3"},"zmid":0,"type":"heatmap"},{"colorscale":[[0.0,"rgb(247,252,245)"],[0.125,"rgb(229,245,224)"],[0.25,"rgb(199,233,192)"],[0.375,"rgb(161,217,155)"],[0.5,"rgb(116,196,118)"],[0.625,"rgb(65,171,93)"],[0.75,"rgb(35,139,69)"],[0.875,"rgb(0,109,44)"],[1.0,"rgb(0,68,27)"]],"showscale":false,"text":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"texttemplate":"%{text}","z":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"zmid":0,"type":"heatmap"}],"layout":{"shapes":[{"line":{"color":"#D55E00","width":3},"type":"rect","x0":0.5,"x1":3.5,"xref":"x","y0":-0.5,"y1":2.5,"yref":"y"}],"title":{"text":"output(0,1) = 0·-1 + 0·1 + 1·-2 + 0·2 + 0·-1 + 3·1 = 1"}},"name":"(0,1)","traces":[0,1,2]},{"data":[{"colorscale":[[0.0,"rgb(247,251,255)"],[0.125,"rgb(222,235,247)"],[0.25,"rgb(198,219,239)"],[0.375,"rgb(158,202,225)"],[0.5,"rgb(107,174,214)"],[0.625,"rgb(66,146,198)"],[0.75,"rgb(33,113,181)"],[0.875,"rgb(8,81,156)"],[1.0,"rgb(8,48,107)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"type":"heatmap"},{"colorscale":[[0.0,"rgb(252,251,253)"],[0.125,"rgb(239,237,245)"],[0.25,"rgb(218,218,235)"],[0.375,"rgb(188,189,220)"],[0.5,"rgb(158,154,200)"],[0.625,"rgb(128,125,186)"],[0.75,"rgb(106,81,163)"],[0.875,"rgb(84,39,143)"],[1.0,"rgb(63,0,125)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAA\u002fAAC\u002fwAB","shape":"3, 3"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAA\u002fAAC\u002fwAB","shape":"3, 3"},"zmid":0,"type":"heatmap"},{"colorscale":[[0.0,"rgb(247,252,245)"],[0.125,"rgb(229,245,224)"],[0.25,"rgb(199,233,192)"],[0.375,"rgb(161,217,155)"],[0.5,"rgb(116,196,118)"],[0.625,"rgb(65,171,93)"],[0.75,"rgb(35,139,69)"],[0.875,"rgb(0,109,44)"],[1.0,"rgb(0,68,27)"]],"showscale":false,"text":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"texttemplate":"%{text}","z":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"zmid":0,"type":"heatmap"}],"layout":{"shapes":[{"line":{"color":"#D55E00","width":3},"type":"rect","x0":1.5,"x1":4.5,"xref":"x","y0":-0.5,"y1":2.5,"yref":"y"}],"title":{"text":"output(0,2) = 0·-1 + 0·1 + 2·-2 + 1·2 + 1·-1 + 1·1 = -2"}},"name":"(0,2)","traces":[0,1,2]},{"data":[{"colorscale":[[0.0,"rgb(247,251,255)"],[0.125,"rgb(222,235,247)"],[0.25,"rgb(198,219,239)"],[0.375,"rgb(158,202,225)"],[0.5,"rgb(107,174,214)"],[0.625,"rgb(66,146,198)"],[0.75,"rgb(33,113,181)"],[0.875,"rgb(8,81,156)"],[1.0,"rgb(8,48,107)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"type":"heatmap"},{"colorscale":[[0.0,"rgb(252,251,253)"],[0.125,"rgb(239,237,245)"],[0.25,"rgb(218,218,235)"],[0.375,"rgb(188,189,220)"],[0.5,"rgb(158,154,200)"],[0.625,"rgb(128,125,186)"],[0.75,"rgb(106,81,163)"],[0.875,"rgb(84,39,143)"],[1.0,"rgb(63,0,125)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAAAAAA\u002fQAA","shape":"3, 3"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAAAAAA\u002fQAA","shape":"3, 3"},"zmid":0,"type":"heatmap"},{"colorscale":[[0.0,"rgb(247,252,245)"],[0.125,"rgb(229,245,224)"],[0.25,"rgb(199,233,192)"],[0.375,"rgb(161,217,155)"],[0.5,"rgb(116,196,118)"],[0.625,"rgb(65,171,93)"],[0.75,"rgb(35,139,69)"],[0.875,"rgb(0,109,44)"],[1.0,"rgb(0,68,27)"]],"showscale":false,"text":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"texttemplate":"%{text}","z":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"zmid":0,"type":"heatmap"}],"layout":{"shapes":[{"line":{"color":"#D55E00","width":3},"type":"rect","x0":2.5,"x1":5.5,"xref":"x","y0":-0.5,"y1":2.5,"yref":"y"}],"title":{"text":"output(0,3) = 0·-1 + 0·1 + 0·-2 + 0·2 + 3·-1 + 0·1 = -3"}},"name":"(0,3)","traces":[0,1,2]},{"data":[{"colorscale":[[0.0,"rgb(247,251,255)"],[0.125,"rgb(222,235,247)"],[0.25,"rgb(198,219,239)"],[0.375,"rgb(158,202,225)"],[0.5,"rgb(107,174,214)"],[0.625,"rgb(66,146,198)"],[0.75,"rgb(33,113,181)"],[0.875,"rgb(8,81,156)"],[1.0,"rgb(8,48,107)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"type":"heatmap"},{"colorscale":[[0.0,"rgb(252,251,253)"],[0.125,"rgb(239,237,245)"],[0.25,"rgb(218,218,235)"],[0.375,"rgb(188,189,220)"],[0.5,"rgb(158,154,200)"],[0.625,"rgb(128,125,186)"],[0.75,"rgb(106,81,163)"],[0.875,"rgb(84,39,143)"],[1.0,"rgb(63,0,125)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAACAAACAAAB","shape":"3, 3"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAACAAACAAAB","shape":"3, 3"},"zmid":0,"type":"heatmap"},{"colorscale":[[0.0,"rgb(247,252,245)"],[0.125,"rgb(229,245,224)"],[0.25,"rgb(199,233,192)"],[0.375,"rgb(161,217,155)"],[0.5,"rgb(116,196,118)"],[0.625,"rgb(65,171,93)"],[0.75,"rgb(35,139,69)"],[0.875,"rgb(0,109,44)"],[1.0,"rgb(0,68,27)"]],"showscale":false,"text":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"texttemplate":"%{text}","z":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"zmid":0,"type":"heatmap"}],"layout":{"shapes":[{"line":{"color":"#D55E00","width":3},"type":"rect","x0":-0.5,"x1":2.5,"xref":"x","y0":0.5,"y1":3.5,"yref":"y"}],"title":{"text":"output(1,0) = 0·-1 + 2·1 + 0·-2 + 1·2 + 0·-1 + 1·1 = 5"}},"name":"(1,0)","traces":[0,1,2]},{"data":[{"colorscale":[[0.0,"rgb(247,251,255)"],[0.125,"rgb(222,235,247)"],[0.25,"rgb(198,219,239)"],[0.375,"rgb(158,202,225)"],[0.5,"rgb(107,174,214)"],[0.625,"rgb(66,146,198)"],[0.75,"rgb(33,113,181)"],[0.875,"rgb(8,81,156)"],[1.0,"rgb(8,48,107)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"type":"heatmap"},{"colorscale":[[0.0,"rgb(252,251,253)"],[0.125,"rgb(239,237,245)"],[0.25,"rgb(218,218,235)"],[0.375,"rgb(188,189,220)"],[0.5,"rgb(158,154,200)"],[0.625,"rgb(128,125,186)"],[0.75,"rgb(106,81,163)"],[0.875,"rgb(84,39,143)"],[1.0,"rgb(63,0,125)"]],"showscale":false,"text":{"dtype":"i1","bdata":"\u002fwAAAAAG\u002fgAA","shape":"3, 3"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"\u002fwAAAAAG\u002fgAA","shape":"3, 3"},"zmid":0,"type":"heatmap"},{"colorscale":[[0.0,"rgb(247,252,245)"],[0.125,"rgb(229,245,224)"],[0.25,"rgb(199,233,192)"],[0.375,"rgb(161,217,155)"],[0.5,"rgb(116,196,118)"],[0.625,"rgb(65,171,93)"],[0.75,"rgb(35,139,69)"],[0.875,"rgb(0,109,44)"],[1.0,"rgb(0,68,27)"]],"showscale":false,"text":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAAhAAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"texttemplate":"%{text}","z":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAAhAAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"zmid":0,"type":"heatmap"}],"layout":{"shapes":[{"line":{"color":"#D55E00","width":3},"type":"rect","x0":0.5,"x1":3.5,"xref":"x","y0":0.5,"y1":3.5,"yref":"y"}],"title":{"text":"output(1,1) = 1·-1 + 0·1 + 0·-2 + 3·2 + 2·-1 + 0·1 = 3"}},"name":"(1,1)","traces":[0,1,2]},{"data":[{"colorscale":[[0.0,"rgb(247,251,255)"],[0.125,"rgb(222,235,247)"],[0.25,"rgb(198,219,239)"],[0.375,"rgb(158,202,225)"],[0.5,"rgb(107,174,214)"],[0.625,"rgb(66,146,198)"],[0.75,"rgb(33,113,181)"],[0.875,"rgb(8,81,156)"],[1.0,"rgb(8,48,107)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"type":"heatmap"},{"colorscale":[[0.0,"rgb(252,251,253)"],[0.125,"rgb(239,237,245)"],[0.25,"rgb(218,218,235)"],[0.375,"rgb(188,189,220)"],[0.5,"rgb(158,154,200)"],[0.625,"rgb(128,125,186)"],[0.75,"rgb(106,81,163)"],[0.875,"rgb(84,39,143)"],[1.0,"rgb(63,0,125)"]],"showscale":false,"text":{"dtype":"i1","bdata":"\u002fgAB\u002fgAC\u002fwAC","shape":"3, 3"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"\u002fgAB\u002fgAC\u002fwAC","shape":"3, 3"},"zmid":0,"type":"heatmap"},{"colorscale":[[0.0,"rgb(247,252,245)"],[0.125,"rgb(229,245,224)"],[0.25,"rgb(199,233,192)"],[0.375,"rgb(161,217,155)"],[0.5,"rgb(116,196,118)"],[0.625,"rgb(65,171,93)"],[0.75,"rgb(35,139,69)"],[0.875,"rgb(0,109,44)"],[1.0,"rgb(0,68,27)"]],"showscale":false,"text":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAAhAAAAAAAAAAAAAAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"texttemplate":"%{text}","z":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAAhAAAAAAAAAAAAAAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"zmid":0,"type":"heatmap"}],"layout":{"shapes":[{"line":{"color":"#D55E00","width":3},"type":"rect","x0":1.5,"x1":4.5,"xref":"x","y0":0.5,"y1":3.5,"yref":"y"}],"title":{"text":"output(1,2) = 2·-1 + 1·1 + 1·-2 + 1·2 + 1·-1 + 2·1 = 0"}},"name":"(1,2)","traces":[0,1,2]},{"data":[{"colorscale":[[0.0,"rgb(247,251,255)"],[0.125,"rgb(222,235,247)"],[0.25,"rgb(198,219,239)"],[0.375,"rgb(158,202,225)"],[0.5,"rgb(107,174,214)"],[0.625,"rgb(66,146,198)"],[0.75,"rgb(33,113,181)"],[0.875,"rgb(8,81,156)"],[1.0,"rgb(8,48,107)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"type":"heatmap"},{"colorscale":[[0.0,"rgb(252,251,253)"],[0.125,"rgb(239,237,245)"],[0.25,"rgb(218,218,235)"],[0.375,"rgb(188,189,220)"],[0.5,"rgb(158,154,200)"],[0.625,"rgb(128,125,186)"],[0.75,"rgb(106,81,163)"],[0.875,"rgb(84,39,143)"],[1.0,"rgb(63,0,125)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAA+gAAAAAA","shape":"3, 3"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAA+gAAAAAA","shape":"3, 3"},"zmid":0,"type":"heatmap"},{"colorscale":[[0.0,"rgb(247,252,245)"],[0.125,"rgb(229,245,224)"],[0.25,"rgb(199,233,192)"],[0.375,"rgb(161,217,155)"],[0.5,"rgb(116,196,118)"],[0.625,"rgb(65,171,93)"],[0.75,"rgb(35,139,69)"],[0.875,"rgb(0,109,44)"],[1.0,"rgb(0,68,27)"]],"showscale":false,"text":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAAhAAAAAAAAAAAAAAAAAAAAYwAAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"texttemplate":"%{text}","z":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAAhAAAAAAAAAAAAAAAAAAAAYwAAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"zmid":0,"type":"heatmap"}],"layout":{"shapes":[{"line":{"color":"#D55E00","width":3},"type":"rect","x0":2.5,"x1":5.5,"xref":"x","y0":0.5,"y1":3.5,"yref":"y"}],"title":{"text":"output(1,3) = 0·-1 + 0·1 + 3·-2 + 0·2 + 0·-1 + 0·1 = -6"}},"name":"(1,3)","traces":[0,1,2]},{"data":[{"colorscale":[[0.0,"rgb(247,251,255)"],[0.125,"rgb(222,235,247)"],[0.25,"rgb(198,219,239)"],[0.375,"rgb(158,202,225)"],[0.5,"rgb(107,174,214)"],[0.625,"rgb(66,146,198)"],[0.75,"rgb(33,113,181)"],[0.875,"rgb(8,81,156)"],[1.0,"rgb(8,48,107)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"type":"heatmap"},{"colorscale":[[0.0,"rgb(252,251,253)"],[0.125,"rgb(239,237,245)"],[0.25,"rgb(218,218,235)"],[0.375,"rgb(188,189,220)"],[0.5,"rgb(158,154,200)"],[0.625,"rgb(128,125,186)"],[0.75,"rgb(106,81,163)"],[0.875,"rgb(84,39,143)"],[1.0,"rgb(63,0,125)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAABAAACAAAA","shape":"3, 3"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAABAAACAAAA","shape":"3, 3"},"zmid":0,"type":"heatmap"},{"colorscale":[[0.0,"rgb(247,252,245)"],[0.125,"rgb(229,245,224)"],[0.25,"rgb(199,233,192)"],[0.375,"rgb(161,217,155)"],[0.5,"rgb(116,196,118)"],[0.625,"rgb(65,171,93)"],[0.75,"rgb(35,139,69)"],[0.875,"rgb(0,109,44)"],[1.0,"rgb(0,68,27)"]],"showscale":false,"text":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAAhAAAAAAAAAAAAAAAAAAAAYwAAAAAAAAAhAAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"texttemplate":"%{text}","z":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAAhAAAAAAAAAAAAAAAAAAAAYwAAAAAAAAAhAAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"zmid":0,"type":"heatmap"}],"layout":{"shapes":[{"line":{"color":"#D55E00","width":3},"type":"rect","x0":-0.5,"x1":2.5,"xref":"x","y0":1.5,"y1":4.5,"yref":"y"}],"title":{"text":"output(2,0) = 0·-1 + 1·1 + 0·-2 + 1·2 + 0·-1 + 0·1 = 3"}},"name":"(2,0)","traces":[0,1,2]},{"data":[{"colorscale":[[0.0,"rgb(247,251,255)"],[0.125,"rgb(222,235,247)"],[0.25,"rgb(198,219,239)"],[0.375,"rgb(158,202,225)"],[0.5,"rgb(107,174,214)"],[0.625,"rgb(66,146,198)"],[0.75,"rgb(33,113,181)"],[0.875,"rgb(8,81,156)"],[1.0,"rgb(8,48,107)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"type":"heatmap"},{"colorscale":[[0.0,"rgb(252,251,253)"],[0.125,"rgb(239,237,245)"],[0.25,"rgb(218,218,235)"],[0.375,"rgb(188,189,220)"],[0.5,"rgb(158,154,200)"],[0.625,"rgb(128,125,186)"],[0.75,"rgb(106,81,163)"],[0.875,"rgb(84,39,143)"],[1.0,"rgb(63,0,125)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAD\u002fAAA\u002fwAB","shape":"3, 3"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAD\u002fAAA\u002fwAB","shape":"3, 3"},"zmid":0,"type":"heatmap"},{"colorscale":[[0.0,"rgb(247,252,245)"],[0.125,"rgb(229,245,224)"],[0.25,"rgb(199,233,192)"],[0.375,"rgb(161,217,155)"],[0.5,"rgb(116,196,118)"],[0.625,"rgb(65,171,93)"],[0.75,"rgb(35,139,69)"],[0.875,"rgb(0,109,44)"],[1.0,"rgb(0,68,27)"]],"showscale":false,"text":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAAhAAAAAAAAAAAAAAAAAAAAYwAAAAAAAAAhAAAAAAAAA8L8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"texttemplate":"%{text}","z":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAAhAAAAAAAAAAAAAAAAAAAAYwAAAAAAAAAhAAAAAAAAA8L8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"zmid":0,"type":"heatmap"}],"layout":{"shapes":[{"line":{"color":"#D55E00","width":3},"type":"rect","x0":0.5,"x1":3.5,"xref":"x","y0":1.5,"y1":4.5,"yref":"y"}],"title":{"text":"output(2,1) = 0·-1 + 3·1 + 2·-2 + 0·2 + 1·-1 + 1·1 = -1"}},"name":"(2,1)","traces":[0,1,2]},{"data":[{"colorscale":[[0.0,"rgb(247,251,255)"],[0.125,"rgb(222,235,247)"],[0.25,"rgb(198,219,239)"],[0.375,"rgb(158,202,225)"],[0.5,"rgb(107,174,214)"],[0.625,"rgb(66,146,198)"],[0.75,"rgb(33,113,181)"],[0.875,"rgb(8,81,156)"],[1.0,"rgb(8,48,107)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"type":"heatmap"},{"colorscale":[[0.0,"rgb(252,251,253)"],[0.125,"rgb(239,237,245)"],[0.25,"rgb(218,218,235)"],[0.375,"rgb(188,189,220)"],[0.5,"rgb(158,154,200)"],[0.625,"rgb(128,125,186)"],[0.75,"rgb(106,81,163)"],[0.875,"rgb(84,39,143)"],[1.0,"rgb(63,0,125)"]],"showscale":false,"text":{"dtype":"i1","bdata":"\u002fwAB\u002fgAEAAAB","shape":"3, 3"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"\u002fwAB\u002fgAEAAAB","shape":"3, 3"},"zmid":0,"type":"heatmap"},{"colorscale":[[0.0,"rgb(247,252,245)"],[0.125,"rgb(229,245,224)"],[0.25,"rgb(199,233,192)"],[0.375,"rgb(161,217,155)"],[0.5,"rgb(116,196,118)"],[0.625,"rgb(65,171,93)"],[0.75,"rgb(35,139,69)"],[0.875,"rgb(0,109,44)"],[1.0,"rgb(0,68,27)"]],"showscale":false,"text":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAAhAAAAAAAAAAAAAAAAAAAAYwAAAAAAAAAhAAAAAAAAA8L8AAAAAAAAIQAAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"texttemplate":"%{text}","z":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAAhAAAAAAAAAAAAAAAAAAAAYwAAAAAAAAAhAAAAAAAAA8L8AAAAAAAAIQAAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"zmid":0,"type":"heatmap"}],"layout":{"shapes":[{"line":{"color":"#D55E00","width":3},"type":"rect","x0":1.5,"x1":4.5,"xref":"x","y0":1.5,"y1":4.5,"yref":"y"}],"title":{"text":"output(2,2) = 1·-1 + 1·1 + 1·-2 + 2·2 + 0·-1 + 1·1 = 3"}},"name":"(2,2)","traces":[0,1,2]},{"data":[{"colorscale":[[0.0,"rgb(247,251,255)"],[0.125,"rgb(222,235,247)"],[0.25,"rgb(198,219,239)"],[0.375,"rgb(158,202,225)"],[0.5,"rgb(107,174,214)"],[0.625,"rgb(66,146,198)"],[0.75,"rgb(33,113,181)"],[0.875,"rgb(8,81,156)"],[1.0,"rgb(8,48,107)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"type":"heatmap"},{"colorscale":[[0.0,"rgb(252,251,253)"],[0.125,"rgb(239,237,245)"],[0.25,"rgb(218,218,235)"],[0.375,"rgb(188,189,220)"],[0.5,"rgb(158,154,200)"],[0.625,"rgb(128,125,186)"],[0.75,"rgb(106,81,163)"],[0.875,"rgb(84,39,143)"],[1.0,"rgb(63,0,125)"]],"showscale":false,"text":{"dtype":"i1","bdata":"\u002fQAAAAAA\u002fwAA","shape":"3, 3"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"\u002fQAAAAAA\u002fwAA","shape":"3, 3"},"zmid":0,"type":"heatmap"},{"colorscale":[[0.0,"rgb(247,252,245)"],[0.125,"rgb(229,245,224)"],[0.25,"rgb(199,233,192)"],[0.375,"rgb(161,217,155)"],[0.5,"rgb(116,196,118)"],[0.625,"rgb(65,171,93)"],[0.75,"rgb(35,139,69)"],[0.875,"rgb(0,109,44)"],[1.0,"rgb(0,68,27)"]],"showscale":false,"text":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAAhAAAAAAAAAAAAAAAAAAAAYwAAAAAAAAAhAAAAAAAAA8L8AAAAAAAAIQAAAAAAAABDAAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"texttemplate":"%{text}","z":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAAhAAAAAAAAAAAAAAAAAAAAYwAAAAAAAAAhAAAAAAAAA8L8AAAAAAAAIQAAAAAAAABDAAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"zmid":0,"type":"heatmap"}],"layout":{"shapes":[{"line":{"color":"#D55E00","width":3},"type":"rect","x0":2.5,"x1":5.5,"xref":"x","y0":1.5,"y1":4.5,"yref":"y"}],"title":{"text":"output(2,3) = 3·-1 + 0·1 + 0·-2 + 0·2 + 1·-1 + 0·1 = -4"}},"name":"(2,3)","traces":[0,1,2]},{"data":[{"colorscale":[[0.0,"rgb(247,251,255)"],[0.125,"rgb(222,235,247)"],[0.25,"rgb(198,219,239)"],[0.375,"rgb(158,202,225)"],[0.5,"rgb(107,174,214)"],[0.625,"rgb(66,146,198)"],[0.75,"rgb(33,113,181)"],[0.875,"rgb(8,81,156)"],[1.0,"rgb(8,48,107)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"type":"heatmap"},{"colorscale":[[0.0,"rgb(252,251,253)"],[0.125,"rgb(239,237,245)"],[0.25,"rgb(218,218,235)"],[0.375,"rgb(188,189,220)"],[0.5,"rgb(158,154,200)"],[0.625,"rgb(128,125,186)"],[0.75,"rgb(106,81,163)"],[0.875,"rgb(84,39,143)"],[1.0,"rgb(63,0,125)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAABAAAAAAAA","shape":"3, 3"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAABAAAAAAAA","shape":"3, 3"},"zmid":0,"type":"heatmap"},{"colorscale":[[0.0,"rgb(247,252,245)"],[0.125,"rgb(229,245,224)"],[0.25,"rgb(199,233,192)"],[0.375,"rgb(161,217,155)"],[0.5,"rgb(116,196,118)"],[0.625,"rgb(65,171,93)"],[0.75,"rgb(35,139,69)"],[0.875,"rgb(0,109,44)"],[1.0,"rgb(0,68,27)"]],"showscale":false,"text":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAAhAAAAAAAAAAAAAAAAAAAAYwAAAAAAAAAhAAAAAAAAA8L8AAAAAAAAIQAAAAAAAABDAAAAAAAAA8D8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"texttemplate":"%{text}","z":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAAhAAAAAAAAAAAAAAAAAAAAYwAAAAAAAAAhAAAAAAAAA8L8AAAAAAAAIQAAAAAAAABDAAAAAAAAA8D8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"zmid":0,"type":"heatmap"}],"layout":{"shapes":[{"line":{"color":"#D55E00","width":3},"type":"rect","x0":-0.5,"x1":2.5,"xref":"x","y0":2.5,"y1":5.5,"yref":"y"}],"title":{"text":"output(3,0) = 0·-1 + 1·1 + 0·-2 + 0·2 + 0·-1 + 0·1 = 1"}},"name":"(3,0)","traces":[0,1,2]},{"data":[{"colorscale":[[0.0,"rgb(247,251,255)"],[0.125,"rgb(222,235,247)"],[0.25,"rgb(198,219,239)"],[0.375,"rgb(158,202,225)"],[0.5,"rgb(107,174,214)"],[0.625,"rgb(66,146,198)"],[0.75,"rgb(33,113,181)"],[0.875,"rgb(8,81,156)"],[1.0,"rgb(8,48,107)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"type":"heatmap"},{"colorscale":[[0.0,"rgb(252,251,253)"],[0.125,"rgb(239,237,245)"],[0.25,"rgb(218,218,235)"],[0.375,"rgb(188,189,220)"],[0.5,"rgb(158,154,200)"],[0.625,"rgb(128,125,186)"],[0.75,"rgb(106,81,163)"],[0.875,"rgb(84,39,143)"],[1.0,"rgb(63,0,125)"]],"showscale":false,"text":{"dtype":"i1","bdata":"\u002fgAA\u002fgACAAAA","shape":"3, 3"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"\u002fgAA\u002fgACAAAA","shape":"3, 3"},"zmid":0,"type":"heatmap"},{"colorscale":[[0.0,"rgb(247,252,245)"],[0.125,"rgb(229,245,224)"],[0.25,"rgb(199,233,192)"],[0.375,"rgb(161,217,155)"],[0.5,"rgb(116,196,118)"],[0.625,"rgb(65,171,93)"],[0.75,"rgb(35,139,69)"],[0.875,"rgb(0,109,44)"],[1.0,"rgb(0,68,27)"]],"showscale":false,"text":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAAhAAAAAAAAAAAAAAAAAAAAYwAAAAAAAAAhAAAAAAAAA8L8AAAAAAAAIQAAAAAAAABDAAAAAAAAA8D8AAAAAAAAAwAAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"texttemplate":"%{text}","z":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAAhAAAAAAAAAAAAAAAAAAAAYwAAAAAAAAAhAAAAAAAAA8L8AAAAAAAAIQAAAAAAAABDAAAAAAAAA8D8AAAAAAAAAwAAAAAAAAPh\u002fAAAAAAAA+H8=","shape":"4, 4"},"zmid":0,"type":"heatmap"}],"layout":{"shapes":[{"line":{"color":"#D55E00","width":3},"type":"rect","x0":0.5,"x1":3.5,"xref":"x","y0":2.5,"y1":5.5,"yref":"y"}],"title":{"text":"output(3,1) = 2·-1 + 0·1 + 1·-2 + 1·2 + 0·-1 + 0·1 = -2"}},"name":"(3,1)","traces":[0,1,2]},{"data":[{"colorscale":[[0.0,"rgb(247,251,255)"],[0.125,"rgb(222,235,247)"],[0.25,"rgb(198,219,239)"],[0.375,"rgb(158,202,225)"],[0.5,"rgb(107,174,214)"],[0.625,"rgb(66,146,198)"],[0.75,"rgb(33,113,181)"],[0.875,"rgb(8,81,156)"],[1.0,"rgb(8,48,107)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"type":"heatmap"},{"colorscale":[[0.0,"rgb(252,251,253)"],[0.125,"rgb(239,237,245)"],[0.25,"rgb(218,218,235)"],[0.375,"rgb(188,189,220)"],[0.5,"rgb(158,154,200)"],[0.625,"rgb(128,125,186)"],[0.75,"rgb(106,81,163)"],[0.875,"rgb(84,39,143)"],[1.0,"rgb(63,0,125)"]],"showscale":false,"text":{"dtype":"i1","bdata":"\u002fwACAAACAAAA","shape":"3, 3"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"\u002fwACAAACAAAA","shape":"3, 3"},"zmid":0,"type":"heatmap"},{"colorscale":[[0.0,"rgb(247,252,245)"],[0.125,"rgb(229,245,224)"],[0.25,"rgb(199,233,192)"],[0.375,"rgb(161,217,155)"],[0.5,"rgb(116,196,118)"],[0.625,"rgb(65,171,93)"],[0.75,"rgb(35,139,69)"],[0.875,"rgb(0,109,44)"],[1.0,"rgb(0,68,27)"]],"showscale":false,"text":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAAhAAAAAAAAAAAAAAAAAAAAYwAAAAAAAAAhAAAAAAAAA8L8AAAAAAAAIQAAAAAAAABDAAAAAAAAA8D8AAAAAAAAAwAAAAAAAAAhAAAAAAAAA+H8=","shape":"4, 4"},"texttemplate":"%{text}","z":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAAhAAAAAAAAAAAAAAAAAAAAYwAAAAAAAAAhAAAAAAAAA8L8AAAAAAAAIQAAAAAAAABDAAAAAAAAA8D8AAAAAAAAAwAAAAAAAAAhAAAAAAAAA+H8=","shape":"4, 4"},"zmid":0,"type":"heatmap"}],"layout":{"shapes":[{"line":{"color":"#D55E00","width":3},"type":"rect","x0":1.5,"x1":4.5,"xref":"x","y0":2.5,"y1":5.5,"yref":"y"}],"title":{"text":"output(3,2) = 1·-1 + 2·1 + 0·-2 + 1·2 + 0·-1 + 0·1 = 3"}},"name":"(3,2)","traces":[0,1,2]},{"data":[{"colorscale":[[0.0,"rgb(247,251,255)"],[0.125,"rgb(222,235,247)"],[0.25,"rgb(198,219,239)"],[0.375,"rgb(158,202,225)"],[0.5,"rgb(107,174,214)"],[0.625,"rgb(66,146,198)"],[0.75,"rgb(33,113,181)"],[0.875,"rgb(8,81,156)"],[1.0,"rgb(8,48,107)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAAAAAAAAECAAEAAAABAwEAAAIBAAIAAAEAAQEAAAAAAAAA","shape":"6, 6"},"type":"heatmap"},{"colorscale":[[0.0,"rgb(252,251,253)"],[0.125,"rgb(239,237,245)"],[0.25,"rgb(218,218,235)"],[0.375,"rgb(188,189,220)"],[0.5,"rgb(158,154,200)"],[0.625,"rgb(128,125,186)"],[0.75,"rgb(106,81,163)"],[0.875,"rgb(84,39,143)"],[1.0,"rgb(63,0,125)"]],"showscale":false,"text":{"dtype":"i1","bdata":"AAAA\u002fgAAAAAA","shape":"3, 3"},"texttemplate":"%{text}","z":{"dtype":"i1","bdata":"AAAA\u002fgAAAAAA","shape":"3, 3"},"zmid":0,"type":"heatmap"},{"colorscale":[[0.0,"rgb(247,252,245)"],[0.125,"rgb(229,245,224)"],[0.25,"rgb(199,233,192)"],[0.375,"rgb(161,217,155)"],[0.5,"rgb(116,196,118)"],[0.625,"rgb(65,171,93)"],[0.75,"rgb(35,139,69)"],[0.875,"rgb(0,109,44)"],[1.0,"rgb(0,68,27)"]],"showscale":false,"text":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAAhAAAAAAAAAAAAAAAAAAAAYwAAAAAAAAAhAAAAAAAAA8L8AAAAAAAAIQAAAAAAAABDAAAAAAAAA8D8AAAAAAAAAwAAAAAAAAAhAAAAAAAAAAMA=","shape":"4, 4"},"texttemplate":"%{text}","z":{"dtype":"f8","bdata":"AAAAAAAAFEAAAAAAAADwPwAAAAAAAADAAAAAAAAACMAAAAAAAAAUQAAAAAAAAAhAAAAAAAAAAAAAAAAAAAAYwAAAAAAAAAhAAAAAAAAA8L8AAAAAAAAIQAAAAAAAABDAAAAAAAAA8D8AAAAAAAAAwAAAAAAAAAhAAAAAAAAAAMA=","shape":"4, 4"},"zmid":0,"type":"heatmap"}],"layout":{"shapes":[{"line":{"color":"#D55E00","width":3},"type":"rect","x0":2.5,"x1":5.5,"xref":"x","y0":2.5,"y1":5.5,"yref":"y"}],"title":{"text":"output(3,3) = 0·-1 + 0·1 + 1·-2 + 0·2 + 0·-1 + 0·1 = -2"}},"name":"(3,3)","traces":[0,1,2]}]);
+                        }).then(function(){
+                            Plotly.animate('11889069-65db-4ab4-8805-d4cc26a4367c', null);
+                        })                };            </script>        </div></div><figcaption><b>Figure 4.</b> 2D convolution of a 4 × 4 image with a 3 × 3 kernel using one ring of zero padding ("same" output size). (a) The kernel is flipped horizontally and vertically to give (b). (c) The flipped kernel is placed over each 3 × 3 window of the padded image, (d) multiplied element-wise and summed, giving one output pixel (e). <button class="fig-toggle" data-target="fig-conv2d_flip_slide" type="button">Interactive version</button></figcaption></figure>
+<section class="worked-example" id="ex-conv2d-11"><h4>Worked example 2: 2D Convolution</h4><div class="example-q"><p>Find the result of convolving the $2 \times 2$ kernel</p>
+<p>$$A = \begin{pmatrix}-3 &amp; -3 \\ 2 &amp; 0\end{pmatrix}$$</p>
+<p>with the $3 \times 3$ image</p>
+<p>$$B = \begin{pmatrix}1 &amp; 1 &amp; 1 \\ -3 &amp; 0 &amp; -2 \\ -1 &amp; 3 &amp; 0\end{pmatrix}$$</p>
+<p>(Assuming no-padding — also called &quot;Valid Padding&quot;.) Give your answer as a $2 \times 2$ matrix.</p>
+</div><details class="example-sol"><summary>Show the solution</summary><p><strong>Step 1:</strong> Flip the kernel 180° (rotate both rows and columns) before convolution:</p>
+<p>$$A'= \begin{pmatrix}0 &amp; 2 \\ -3 &amp; -3\end{pmatrix}$$</p>
+<p><strong>Step 2:</strong> Slide the flipped kernel over the image. At each position, compute the element-wise product between the image patch and $A'$, then sum to get the output value.</p>
+<p><strong>Position $O_{00}$ — image patch $B[0:2,\,0:2]$:</strong></p>
+<p>Patch $= \begin{pmatrix}1 &amp; 1 \\ -3 &amp; 0\end{pmatrix}$, flipped kernel $A' = \begin{pmatrix}0 &amp; 2 \\ -3 &amp; -3\end{pmatrix}$</p>
+<p>$$O_{00} = 1 \cdot 0 + 1 \cdot 2 + (-3) \cdot (-3) + 0 \cdot (-3) = 11$$</p>
+<p><strong>Position $O_{01}$ — image patch $B[0:2,\,1:3]$:</strong></p>
+<p>Patch $= \begin{pmatrix}1 &amp; 1 \\ 0 &amp; -2\end{pmatrix}$, flipped kernel $A' = \begin{pmatrix}0 &amp; 2 \\ -3 &amp; -3\end{pmatrix}$</p>
+<p>$$O_{01} = 1 \cdot 0 + 1 \cdot 2 + 0 \cdot (-3) + (-2) \cdot (-3) = 8$$</p>
+<p><strong>Position $O_{10}$ — image patch $B[1:3,\,0:2]$:</strong></p>
+<p>Patch $= \begin{pmatrix}-3 &amp; 0 \\ -1 &amp; 3\end{pmatrix}$, flipped kernel $A' = \begin{pmatrix}0 &amp; 2 \\ -3 &amp; -3\end{pmatrix}$</p>
+<p>$$O_{10} = (-3) \cdot 0 + 0 \cdot 2 + (-1) \cdot (-3) + 3 \cdot (-3) = -6$$</p>
+<p><strong>Position $O_{11}$ — image patch $B[1:3,\,1:3]$:</strong></p>
+<p>Patch $= \begin{pmatrix}0 &amp; -2 \\ 3 &amp; 0\end{pmatrix}$, flipped kernel $A' = \begin{pmatrix}0 &amp; 2 \\ -3 &amp; -3\end{pmatrix}$</p>
+<p>$$O_{11} = 0 \cdot 0 + (-2) \cdot 2 + 3 \cdot (-3) + 0 \cdot (-3) = -13$$</p>
+<p><strong>Result:</strong></p>
+<p>$$C = \begin{pmatrix}11 &amp; 8 \\ -6 &amp; -13\end{pmatrix}$$</p>
+</details></section>
+<h2 id="zero-padding-and-output-size">Zero padding and output size</h2>
+<p>The convolution sum is defined from $-\infty$ to $\infty$, so unless told otherwise we should slide the kernel to every position where it just overlaps the image, padding with zeros as required. Padding creates small edge effects, but with a small kernel on a large image they are negligible. Padding also changes the size of the output. Three cases are common; the formulae come from Dumoulin and Visin's <em>A guide to convolution arithmetic for deep learning</em>, with input size $i$, kernel size $k$, padding $p$ (rings of zeros on each side) and stride $s$ (how far the kernel moves each step; the mathematical definition assumes $s = 1$).</p>
+<table>
+<thead>
+<tr>
+<th>Case</th>
+<th>Padding</th>
+<th>Output size (unit stride)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Valid</strong></td>
+<td>$p = 0$</td>
+<td>$o = (i - k) + 1$</td>
+</tr>
+<tr>
+<td><strong>Same</strong> (odd $k$)</td>
+<td>$p = \lfloor k/2 \rfloor$</td>
+<td>$o = i$</td>
+</tr>
+<tr>
+<td><strong>Full</strong></td>
+<td>$p = k - 1$</td>
+<td>$o = i + (k - 1)$</td>
+</tr>
+<tr>
+<td>General</td>
+<td>any $p$, any $s$</td>
+<td>$o = \left\lfloor \dfrac{i + 2p - k}{s} \right\rfloor + 1$</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Valid</strong> padding uses only real pixels, so a $3 \times 3$ image convolved with a $2 \times 2$ kernel gives a $2 \times 2$ output. <strong>Same</strong> padding chooses exactly enough zeros to keep the output the size of the input; a $3 \times 3$ kernel needs one ring. <strong>Full</strong> padding follows the mathematical definition, so a $4 \times 4$ image with a $3 \times 3$ kernel needs two rings and produces a $6 \times 6$ output.</p>
+<figure class="lesson-fig" id="fig-padding_modes"><img src="figures/padding_modes.png" alt="The three common padding choices for a 4 × 4 image and 3 × 3 kernel with unit stride. Valid padding uses only real pixels and shrinks the output; same padding adds ⌊k/2⌋ rings to keep the size; full padding adds k − 1 rings so the kernel just overlaps the image at the extremes, matching the mathematical definition. Use the calculator below to try other sizes."><figcaption><b>Figure 5.</b> The three common padding choices for a 4 × 4 image and 3 × 3 kernel with unit stride. Valid padding uses only real pixels and shrinks the output; same padding adds ⌊k/2⌋ rings to keep the size; full padding adds k − 1 rings so the kernel just overlaps the image at the extremes, matching the mathematical definition. Use the calculator below to try other sizes.</figcaption>
+<div class="widget conv-calc">
+  <b>Output-size calculator</b> &nbsp; <span class="muted">o = ⌊(i + 2p − k)/s⌋ + 1</span>
+  <div class="widget-row">
+    <label>input i <input type="number" id="cc-i" value="8" min="1"></label>
+    <label>kernel k <input type="number" id="cc-k" value="3" min="1"></label>
+    <label>padding p <input type="number" id="cc-p" value="0" min="0"></label>
+    <label>stride s <input type="number" id="cc-s" value="1" min="1"></label>
+  </div>
+  <div id="cc-out" class="widget-out"></div>
+</div>
+<script>
+(function(){
+  const ids=["cc-i","cc-k","cc-p","cc-s"], out=document.getElementById("cc-out");
+  function upd(){
+    const [i,k,p,s]=ids.map(x=>parseInt(document.getElementById(x).value||"0"));
+    const num=i+2*p-k;
+    if(num<0||s<1){out.textContent="kernel is larger than the padded input";return;}
+    const o=Math.floor(num/s)+1;
+    let mode="custom padding"; if(p===0) mode="valid"; if(k%2===1&&p===Math.floor(k/2)&&s===1) mode="same";
+    if(p===k-1&&s===1) mode="full";
+    out.innerHTML=`o = ⌊(${i} + 2·${p} − ${k}) / ${s}⌋ + 1 = ⌊${num}/${s}⌋ + 1 = <b>${o}</b> &nbsp; → output ${o} × ${o} &nbsp; <span class="muted">(${mode})</span>`;
+  }
+  ids.forEach(x=>document.getElementById(x).addEventListener("input",upd)); upd();
+})();
+</script>
+</figure>
+<section class="worked-example" id="ex-conv_arith1-5"><h4>Worked example 3: Convolution Output Size (No Padding, Unit Stride)</h4><div class="example-q"><p>A $16 \times 16$ input feature map is convolved with a $6 \times 6$ kernel.
+The convolution uses <strong>no zero padding</strong> ($p = 0$) and <strong>unit stride</strong> ($s = 1$).</p>
+<p>What is the output size $o \times o$?</p>
+</div><details class="example-sol"><summary>Show the solution</summary><p>For no zero padding ($p = 0$) and unit stride ($s = 1$), the relationship is:</p>
+<p>$$o = (i - k) + 1$$</p>
+<p>Substituting $i = 16$ and $k = 6$:</p>
+<p>$$o = (16 - 6) + 1 = 10 + 1 = 11$$</p>
+<p>The output is $11 \times 11$.</p>
+</details></section>
+<section class="worked-example" id="ex-conv_arith3-5"><h4>Worked example 4: Convolution Output Size (Half / Same Padding, Unit Stride)</h4><div class="example-q"><p>A $24 \times 24$ input feature map is convolved with a $9 \times 9$ kernel using
+<strong>half (same) padding</strong> and <strong>unit stride</strong> ($s = 1$).</p>
+<p>(a) What zero padding $p$ must be applied on each side?
+(b) What is the output size $o \times o$?</p>
+</div><details class="example-sol"><summary>Show the solution</summary><p><strong>(a) Determine padding.</strong></p>
+<p>For half/same padding the required padding is $p = \lfloor k/2 \rfloor$ (requires $k$ odd):</p>
+<p>$$p = \left\lfloor \frac{9}{2} \right\rfloor = 4$$</p>
+<p><strong>(b) Determine output size.</strong></p>
+<p>Substituting into $o = (i - k) + 2p + 1$ with $p = \lfloor k/2 \rfloor = (k-1)/2$:</p>
+<p>$$o = (24 - 9) + 2 \times 4 + 1 = 15 + 8 + 1 = 24$$</p>
+<p>The output is $24 \times 24$ — equal to the input size.</p>
+</details></section>
+<section class="worked-example" id="ex-conv_arith4-5"><h4>Worked example 5: Convolution Output Size (Full Padding, Unit Stride)</h4><div class="example-q"><p>A $10 \times 10$ input feature map is convolved with a $6 \times 6$ kernel using
+<strong>full padding</strong> and <strong>unit stride</strong> ($s = 1$).</p>
+<p>(a) What zero padding $p$ must be applied on each side?
+(b) What is the output size $o \times o$?</p>
+</div><details class="example-sol"><summary>Show the solution</summary><p><strong>(a) Determine padding.</strong></p>
+<p>Full padding ensures every partial overlap of the kernel over the input is included,
+requiring:</p>
+<p>$$p = k - 1 = 6 - 1 = 5$$</p>
+<p><strong>(b) Determine output size.</strong></p>
+<p>Substituting $p = k - 1$ into $o = (i - k) + 2p + 1$:</p>
+<p>$$o = i + (k - 1) = 10 + (6 - 1) = 10 + 5 = 15$$</p>
+<p>The output is $15 \times 15$ (larger than the input).</p>
+</details></section>
+<p>In practice we use OpenCV or SciPy to perform convolution, but being able to predict the output size, and to work small cases by hand, is essential for understanding what those functions are doing.</p>
+<section class="selfcheck"><h2 id="self-check">Check your understanding</h2><div class="sc-q" data-answer="1"><p class="sc-text">1. In the term h[n − k] of the convolution sum, what does the minus sign in front of k do?</p><ul class="sc-options"><li><label><input type="radio" name="sc01_02_0" value="0"> Shifts the kernel to the left</label></li><li><label><input type="radio" name="sc01_02_0" value="1"> Reverses the kernel</label></li><li><label><input type="radio" name="sc01_02_0" value="2"> Negates the kernel values</label></li><li><label><input type="radio" name="sc01_02_0" value="3"> Nothing; it is a convention</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>Writing h[n − k] = h[−(k − n)] shows that the kernel is reversed (by the minus sign) and shifted by n.</p></div><div class="sc-q" data-answer="2"><p class="sc-text">2. For which kernels do convolution and cross-correlation give the same result?</p><ul class="sc-options"><li><label><input type="radio" name="sc01_02_1" value="0"> All kernels</label></li><li><label><input type="radio" name="sc01_02_1" value="1"> Kernels with all positive values</label></li><li><label><input type="radio" name="sc01_02_1" value="2"> Symmetric kernels, where reversal leaves the kernel unchanged</label></li><li><label><input type="radio" name="sc01_02_1" value="3"> Kernels of odd size</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>Convolution reverses the kernel and cross-correlation does not; if reversal changes nothing (a symmetric kernel) the two coincide.</p></div><div class="sc-q" data-answer="2"><p class="sc-text">3. A 7 × 7 image is convolved with a 3 × 3 kernel using valid padding and unit stride. What is the output size?</p><ul class="sc-options"><li><label><input type="radio" name="sc01_02_2" value="0"> 9 × 9</label></li><li><label><input type="radio" name="sc01_02_2" value="1"> 7 × 7</label></li><li><label><input type="radio" name="sc01_02_2" value="2"> 5 × 5</label></li><li><label><input type="radio" name="sc01_02_2" value="3"> 4 × 4</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>With no padding, o = (i − k) + 1 = (7 − 3) + 1 = 5.</p></div><div class="sc-q" data-answer="2"><p class="sc-text">4. How many rings of zero padding does &#x27;full&#x27; convolution require for a 5 × 5 kernel?</p><ul class="sc-options"><li><label><input type="radio" name="sc01_02_3" value="0"> 1</label></li><li><label><input type="radio" name="sc01_02_3" value="1"> 2</label></li><li><label><input type="radio" name="sc01_02_3" value="2"> 4</label></li><li><label><input type="radio" name="sc01_02_3" value="3"> 5</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>Full padding uses p = k − 1 = 4 rings so that the kernel just overlaps the image at the extremes.</p></div><div class="sc-q" data-answer="1"><p class="sc-text">5. What padding keeps the output of a 3 × 3 convolution the same size as the input (unit stride)?</p><ul class="sc-options"><li><label><input type="radio" name="sc01_02_4" value="0"> p = 0</label></li><li><label><input type="radio" name="sc01_02_4" value="1"> p = 1</label></li><li><label><input type="radio" name="sc01_02_4" value="2"> p = 2</label></li><li><label><input type="radio" name="sc01_02_4" value="3"> p = 3</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>For odd kernels and unit stride, same padding is p = ⌊k/2⌋ = 1.</p></div><div class="sc-q" data-answer="1"><p class="sc-text">6. The first step in 2D convolution by hand is to</p><ul class="sc-options"><li><label><input type="radio" name="sc01_02_5" value="0"> transpose the image</label></li><li><label><input type="radio" name="sc01_02_5" value="1"> flip the kernel horizontally and vertically</label></li><li><label><input type="radio" name="sc01_02_5" value="2"> normalise the kernel to sum to one</label></li><li><label><input type="radio" name="sc01_02_5" value="3"> convert the image to floating point</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>The kernel must be reversed along both axes before it is slid over the (padded) image.</p></div><p><button type="button" class="sc-check">Check answers</button> <span class="sc-score"></span></p></section>
+
+
+  
+  <section class="practice">
+    <h2 id="practice">Practice questions</h2>
+    <p>Question types from the CE6021 question bank that cover this lesson:
+    <code>conv1d</code>, <code>conv2d</code>, <code>conv_arith1</code>, <code>conv_arith2</code>, <code>conv_arith3</code>, <code>conv_arith4</code>, <code>conv_arith5</code>, <code>conv_arith6</code>.</p>
+  </section>
+  
+
+  
+  <section class="credits">
+    <h2 id="image-credits">Image credits</h2>
+    <ul><li><a href="https://commons.wikimedia.org/wiki/File:Great_Sphinx_of_Giza_-_20080716a.jpg">Great Sphinx of Giza - 20080716a</a>, Barcex, <a href="http://creativecommons.org/licenses/by-sa/3.0/">CC BY-SA 3.0</a></li></ul>
+    <p>Other figures are generated from synthetic data by the lesson engines.</p>
+  </section>
+  
+
+  <nav class="pager">
+    <a class="prev" href="01_01.html">&larr; 01.01 Digital images</a>
+    <a class="next" href="01_03.html">01.03 Image sampling and interpolation &rarr;</a>
+  </nav>
+  <footer class="foot">© Dr Tony Scanlan, University of Limerick. Figures generated by the CE6021 lesson builder.</footer>
+</main>
+</div>
+</body>
+</html>

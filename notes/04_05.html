@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>04.05 The Viola-Jones algorithm · CE6021 Machine Vision</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+
+<script defer src="site.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="index.html">CE6021 Machine Vision</a>
+  <span class="crumb">Section 4: Object detection and classification</span>
+</header>
+
+<div class="layout">
+<aside class="sidebar">
+  <nav class="toc">
+    <p class="toc-title">On this page</p>
+    <ul>
+    <li><a href="#learning-outcomes">Learning outcomes</a></li><li><a href="#the-viola-jones-algorithm">The Viola-Jones algorithm</a></li><li><a href="#haar-like-features">Haar-like features</a></li><li><a href="#the-integral-image">The integral image</a></li><li><a href="#classification-with-adaboost">Classification with AdaBoost</a></li><li><a href="#the-attention-cascade">The attention cascade</a></li><li><a href="#training-and-use">Training and use</a></li><li><a href="#self-check">Check your understanding</a></li>
+    </ul>
+  </nav>
+  <nav class="section-nav">
+    <p class="toc-title">Section 4</p>
+    <ul>
+    
+      <li>
+        <a href="04_01.html">1. Introduction to object detection</a>
+      </li>
+    
+      <li>
+        <a href="04_02.html">2. Machine learning for image recognition</a>
+      </li>
+    
+      <li>
+        <a href="04_03.html">3. Classifiers</a>
+      </li>
+    
+      <li>
+        <a href="04_04.html">4. Template matching</a>
+      </li>
+    
+      <li class="current">
+        <span>5. The Viola-Jones algorithm</span>
+        
+      </li>
+    
+      <li>
+        <a href="04_06.html">6. Histogram of oriented gradients</a>
+      </li>
+    
+    </ul>
+  </nav>
+</aside>
+
+<main class="lesson">
+  <p class="kicker">Lesson 04.05</p>
+  <h1>The Viola-Jones algorithm</h1>
+  <p class="summary">Fast face detection from Haar-like rectangle features computed with the integral image, selected and combined by AdaBoost, and arranged in an attention cascade that rejects background windows early.</p>
+
+  <h2 id="learning-outcomes">Learning outcomes</h2>
+<p>After this lesson you should be able to:</p>
+<ul>
+<li>describe <strong>Haar-like features</strong> and how many arise inside a detector window;</li>
+<li>construct an <strong>integral image</strong> and use it to sum any rectangle with four lookups;</li>
+<li>explain how <strong>AdaBoost</strong> selects and combines weak classifiers;</li>
+<li>explain the <strong>attention cascade</strong> and why the algorithm is fast at detection but slow to train.</li>
+</ul>
+<h2 id="the-viola-jones-algorithm">The Viola-Jones algorithm</h2>
+<p>Viola-Jones is an extremely well-known object detector, associated above all with face detection in early digital cameras and phones, though it can be trained for other categories such as road signs. It is a feature-engineering approach with four key ideas: simple <strong>Haar-like features</strong> for discrimination, the <strong>integral image</strong> for fast feature computation, a <strong>boosted classifier</strong> that combines many simple classifiers, and a <strong>cascade</strong> of classifiers that speeds up detection. It is computationally efficient enough for embedded devices.</p>
+<h2 id="haar-like-features">Haar-like features</h2>
+<p>The detector window is usually 24 × 24 pixels and is slid across the image in an exhaustive search. Within it a large number of Haar-like features are evaluated. Each feature is a pattern of adjacent black and white rectangles: the feature value is the sum of the pixels under the white rectangles minus the sum under the black ones, and depending on the pattern it responds to an edge, a line or a diagonal contrast. Every feature type can be scaled and shifted anywhere in the window; applying all positions and scalings of the seven basic types to a 24 × 24 window gives over <strong>180,000</strong> candidate features. No single feature can detect a face; only a combination of very many can, which means a lot of computation.</p>
+<figure class="lesson-fig" id="fig-haar_features"><img src="figures/haar_features.png" alt="Haar-like features. Each feature is the sum of the pixels under its white rectangles minus the sum under its black rectangles, so it responds to an edge, a line or a diagonal pattern of contrast. Every feature type can be scaled and shifted anywhere inside the 24 × 24 detector window, giving a very large pool of candidate features."><figcaption><b>Figure 1.</b> Haar-like features. Each feature is the sum of the pixels under its white rectangles minus the sum under its black rectangles, so it responds to an edge, a line or a diagonal pattern of contrast. Every feature type can be scaled and shifted anywhere inside the 24 × 24 detector window, giving a very large pool of candidate features.</figcaption></figure>
+<section class="worked-example" id="ex-haar_feature-3"><h4>Worked example 1: Haar-Like Feature Computation</h4><div class="example-q"><p>The image $I$ and its pre-computed integral image $II$ are given below (0-indexed rows and columns).</p>
+<p>$$I = \begin{bmatrix}12 &amp; 1 &amp; 2 &amp; 3 &amp; 2 &amp; 12 \\ 13 &amp; 9 &amp; 0 &amp; 1 &amp; 5 &amp; 6 \\ 9 &amp; 7 &amp; 4 &amp; 2 &amp; 11 &amp; 11 \\ 0 &amp; 1 &amp; 7 &amp; 6 &amp; 14 &amp; 8 \\ 6 &amp; 6 &amp; 10 &amp; 9 &amp; 2 &amp; 11 \\ 12 &amp; 15 &amp; 12 &amp; 4 &amp; 5 &amp; 10\end{bmatrix}$$</p>
+<p>$$II = \begin{bmatrix}12 &amp; 13 &amp; 15 &amp; 18 &amp; 20 &amp; 32 \\ 25 &amp; 35 &amp; 37 &amp; 41 &amp; 48 &amp; 66 \\ 34 &amp; 51 &amp; 57 &amp; 63 &amp; 81 &amp; 110 \\ 34 &amp; 52 &amp; 65 &amp; 77 &amp; 109 &amp; 146 \\ 40 &amp; 64 &amp; 87 &amp; 108 &amp; 142 &amp; 190 \\ 52 &amp; 91 &amp; 126 &amp; 151 &amp; 190 &amp; 248\end{bmatrix}$$</p>
+<p>A <strong>vertical-edge</strong> Haar feature is defined with two rectangles, each of height $h = 4$, width $w = 3$, with top-left corner $(r_0, c_0) = (0, 0)$ (0-indexed).</p>
+<p>Feature $=$ sum(right rectangle) $-$ sum(left rectangle).</p>
+<p><strong>Four-corner formula</strong> for a rectangle with inclusive bounds $(r_1, c_1)$ to $(r_2, c_2)$:</p>
+<p>$$\text{rect\_sum}(r_1,c_1,r_2,c_2) = II_{r_2,c_2} - II_{r_1-1,c_2} - II_{r_2,c_1-1} + II_{r_1-1,c_1-1}$$</p>
+<p>(Any term whose index falls below 0 is taken as $0$.)</p>
+<p>Compute the Haar feature value.</p>
+</div><details class="example-sol"><summary>Show the solution</summary><p><strong>Step 1 - Compute rectangle sums.</strong></p>
+<p><strong>Rectangle 1 — left (&quot;black&quot;):</strong> rows $[0,\,3]$, cols $[0,\,2]$</p>
+<ul>
+<li>$II_{3,2} = 65$</li>
+<li>$r_1 = 0$: top boundary term $= 0$</li>
+<li>$c_1 = 0$: left boundary term $= 0$</li>
+<li>Corner boundary term $= 0$</li>
+</ul>
+<p>$$\text{sum} = 65 - 0 - 0 + 0 = 65$$</p>
+<p><strong>Rectangle 2 — right (&quot;white&quot;):</strong> rows $[0,\,3]$, cols $[3,\,5]$</p>
+<ul>
+<li>$II_{3,5} = 146$</li>
+<li>$r_1 = 0$: top boundary term $= 0$</li>
+<li>$II_{3,2} = 65$</li>
+<li>Corner boundary term $= 0$</li>
+</ul>
+<p>$$\text{sum} = 146 - 0 - 65 + 0 = 81$$</p>
+<p><strong>Step 2 - Haar feature value.</strong></p>
+<p>Feature $=$ sum(right rectangle) $-$ sum(left rectangle):</p>
+<p>$$\text{Feature} = 81 - 65 = 16$$</p>
+</details></section>
+<h2 id="the-integral-image">The integral image</h2>
+<p>Each feature needs the sum of the pixels under each of its rectangles: 4 additions for a 2 × 2 rectangle, 9 for 3 × 3, 16 for 4 × 4, and so on. To avoid this cost the authors introduced the <strong>integral image</strong>, also called the summed-area table. It is computed <strong>once</strong> per window in two passes: accumulate the sum down each column, then accumulate along each row of the result. Each entry then holds the sum of all pixels above and to its left, which is easy to check by direct summation. The sum of any rectangle, whatever its size, is obtained from just <strong>four</strong> entries at its corners,</p>
+<p>$$\text{sum} = A - B - C + D, \tag{1}$$</p>
+<p>so larger features cost no more than small ones.</p>
+<figure class="lesson-fig" id="fig-integral_image"><img src="figures/integral_image.png" alt="The integral image (summed-area table). Each entry holds the sum of all pixels above and to the left, computed once by accumulating down the columns and then along the rows. The sum of any rectangle is then A − B − C + D from its four corner entries, so large features cost no more than small ones."><figcaption><b>Figure 2.</b> The integral image (summed-area table). Each entry holds the sum of all pixels above and to the left, computed once by accumulating down the columns and then along the rows. The sum of any rectangle is then A − B − C + D from its four corner entries, so large features cost no more than small ones.</figcaption></figure>
+<section class="worked-example" id="ex-int_img-6"><h4>Worked example 2: Integral Image</h4><div class="example-q"><p>Obtain the integral image of</p>
+<p>$$I = \begin{pmatrix}3 &amp; 4 &amp; 4 &amp; 3 &amp; 6 \\ 3 &amp; 4 &amp; 3 &amp; 3 &amp; 6 \\ 2 &amp; 4 &amp; 3 &amp; 5 &amp; 5 \\ 2 &amp; 5 &amp; 5 &amp; 3 &amp; 1 \\ 4 &amp; 1 &amp; 6 &amp; 6 &amp; 6\end{pmatrix}$$</p>
+<p>Then use the integral image to find the <strong>sum of pixels in the centre $3\times 3$ region</strong> (rows 2–4, columns 2–4, 1-indexed). Express your answer in the form $A-B-C+D$ where $A, B, C, D$ are values from the integral image.</p>
+</div><details class="example-sol"><summary>Show the solution</summary><p><strong>Step 1 – Column cumulative sums.</strong></p>
+<p>Sum each column from top to bottom to form intermediate image $I_1$:</p>
+<p>$$I_1 = \begin{pmatrix}3 &amp; 4 &amp; 4 &amp; 3 &amp; 6 \\ 6 &amp; 8 &amp; 7 &amp; 6 &amp; 12 \\ 8 &amp; 12 &amp; 10 &amp; 11 &amp; 17 \\ 10 &amp; 17 &amp; 15 &amp; 14 &amp; 18 \\ 14 &amp; 18 &amp; 21 &amp; 20 &amp; 24\end{pmatrix}$$</p>
+<p><strong>Step 2 – Row cumulative sums.</strong></p>
+<p>Sum each row of $I_1$ from left to right to produce the integral image $I_I$:</p>
+<p>$$I_I = \begin{pmatrix}3 &amp; 7 &amp; 11 &amp; 14 &amp; 20 \\ 6 &amp; 14 &amp; 21 &amp; 27 &amp; 39 \\ 8 &amp; 20 &amp; 30 &amp; 41 &amp; 58 \\ 10 &amp; 27 &amp; 42 &amp; 56 &amp; 74 \\ 14 &amp; 32 &amp; 53 &amp; 73 &amp; 97\end{pmatrix}$$</p>
+<p><strong>Step 3 – Extract region sum using four corners.</strong></p>
+<p>For the centre $3\times 3$ region (rows 2–4, cols 2–4, 1-indexed):</p>
+<table>
+<thead>
+<tr>
+<th>Symbol</th>
+<th>Position (0-indexed)</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>$A$</td>
+<td>row 3, col 3 (bottom-right of region)</td>
+<td>$56$</td>
+</tr>
+<tr>
+<td>$B$</td>
+<td>row 0, col 3 (above region, same col)</td>
+<td>$14$</td>
+</tr>
+<tr>
+<td>$C$</td>
+<td>row 3, col 0 (left of region, same row)</td>
+<td>$10$</td>
+</tr>
+<tr>
+<td>$D$</td>
+<td>row 0, col 0 (above-left corner)</td>
+<td>$3$</td>
+</tr>
+</tbody>
+</table>
+<p>$$\text{Sum} = A - B - C + D = 56 - 14 - 10 + 3 = 35$$</p>
+<p><em>(Direct verification: summing the 9 values in the centre $3\times 3$ patch also gives 35 ✓)</em></p>
+</details></section>
+<h2 id="classification-with-adaboost">Classification with AdaBoost</h2>
+<p>Individually a rectangle feature is a <strong>very weak binary classifier</strong>: it merely detects a contrast difference somewhere in the window. During training only the best-performing weak classifiers, and hence features, are retained and combined using the <strong>AdaBoost</strong> algorithm. AdaBoost trains weak classifiers in sequence, each concentrating on the examples the previous ones misclassified, and combines their weighted votes into an accurate overall classifier. In Viola-Jones the pool of 180,000 features is reduced to about <strong>6,000</strong> selected ones, still a large number.</p>
+<figure class="lesson-fig" id="fig-adaboost"><img src="figures/adaboost.png" alt="AdaBoost. Each weak classifier here is a single threshold on one feature, a straight cut of the plane that on its own is barely better than chance. Boosting trains them in sequence, each concentrating on the points the previous ones got wrong, and combines their weighted votes into an accurate classifier. Viola-Jones uses the same idea with one rectangle feature per weak classifier."><figcaption><b>Figure 3.</b> AdaBoost. Each weak classifier here is a single threshold on one feature, a straight cut of the plane that on its own is barely better than chance. Boosting trains them in sequence, each concentrating on the points the previous ones got wrong, and combines their weighted votes into an accurate classifier. Viola-Jones uses the same idea with one rectangle feature per weak classifier.</figcaption></figure>
+<h3>Interpreting the selected features</h3>
+<p>The rectangle features AdaBoost selects first are easily interpreted. The first exploits the fact that the eye region is darker than the top of the nose and the cheeks; the second that the eyes are darker than the bridge of the nose between them.</p>
+<figure class="lesson-fig" id="fig-feature_on_face"><img src="figures/feature_on_face.png" alt="Interpreting the selected features. The first two features chosen by AdaBoost in the original paper exploit two properties of faces: the eye region is darker than the cheeks and the top of the nose, and the eyes are darker than the bridge of the nose between them. Both come out positive here. Mean intensities are shown so that the two rectangles are comparable; each is four integral-image lookups."><figcaption><b>Figure 4.</b> Interpreting the selected features. The first two features chosen by AdaBoost in the original paper exploit two properties of faces: the eye region is darker than the cheeks and the top of the nose, and the eyes are darker than the bridge of the nose between them. Both come out positive here. Mean intensities are shown so that the two rectangles are comparable; each is four integral-image lookups. <span class="credit">Image: <a href="https://commons.wikimedia.org/wiki/File:Jimmy_answering_questions.jpg">Jimmy answering questions</a>, Beatrice Murch, <a href="https://creativecommons.org/licenses/by/3.0">CC BY 3.0</a>.</span></figcaption></figure>
+<h2 id="the-attention-cascade">The attention cascade</h2>
+<p>Even after selection, evaluating all 6,000 features in every window is expensive, and most windows of an image contain no face at all. The remedy is a <strong>cascade</strong> of classifiers grouped into stages. In the original detector there are 38 stages, with 1, 10, 25 and 50 weak classifiers in the first four. Training is modified to build the cascade so that the classifiers with the <strong>lowest false-negative rate</strong>, those least likely to miss a face, come first. A window is rejected as soon as any stage rejects it, so empty and background regions are discarded after one or a few feature evaluations and no time is spent on the remaining stages.</p>
+<figure class="lesson-fig" id="fig-cascade"><img src="figures/cascade.png" alt="The attention cascade. Weak classifiers are grouped into stages of increasing size; the first stages use the features with the lowest false-negative rate, so they almost never reject a real face but discard most background windows immediately. Only windows that pass every stage are declared faces, so the average window costs very few feature evaluations."><figcaption><b>Figure 5.</b> The attention cascade. Weak classifiers are grouped into stages of increasing size; the first stages use the features with the lowest false-negative rate, so they almost never reject a real face but discard most background windows immediately. Only windows that pass every stage are declared faces, so the average window costs very few feature evaluations.</figcaption></figure>
+<h2 id="training-and-use">Training and use</h2>
+<p>Viola-Jones is <strong>slow to train</strong> but, because of its structure, <strong>fast to run</strong>. Training needs a labelled set of face and non-face patches; the complete set of features is evaluated on them to produce a very large set of weak classifiers; the modified AdaBoost selects a reduced set of the best and arranges them into a cascade. At test time the cascade is applied as a sliding-window detector, with an image pyramid for scale.</p>
+<figure class="lesson-fig" id="fig-face_detection"><img src="figures/face_detection.png" alt="The trained Viola-Jones cascade shipped with OpenCV applied as a sliding-window detector over an image pyramid. Training is slow, but the integral image, the small number of selected features and the cascade make detection fast enough for early digital cameras and phones. Faces that are small, turned away or partly hidden are missed."><figcaption><b>Figure 6.</b> The trained Viola-Jones cascade shipped with OpenCV applied as a sliding-window detector over an image pyramid. Training is slow, but the integral image, the small number of selected features and the cascade make detection fast enough for early digital cameras and phones. Faces that are small, turned away or partly hidden are missed. <span class="credit">Image: <a href="https://commons.wikimedia.org/wiki/File:Friends_become_family.jpg">Friends become family</a>, Satndy, <a href="https://creativecommons.org/licenses/by-sa/4.0">CC BY-SA 4.0</a>; <a href="https://commons.wikimedia.org/wiki/File:Jimmy_answering_questions.jpg">Jimmy answering questions</a>, Beatrice Murch, <a href="https://creativecommons.org/licenses/by/3.0">CC BY 3.0</a>.</span></figcaption></figure>
+<section class="selfcheck"><h2 id="self-check">Check your understanding</h2><div class="sc-q" data-answer="1"><p class="sc-text">1. The value of a Haar-like feature is</p><ul class="sc-options"><li><label><input type="radio" name="sc04_05_0" value="0"> the average pixel value in the window</label></li><li><label><input type="radio" name="sc04_05_0" value="1"> the sum of pixels under its white rectangles minus the sum under its black rectangles</label></li><li><label><input type="radio" name="sc04_05_0" value="2"> the number of edges in the window</label></li><li><label><input type="radio" name="sc04_05_0" value="3"> the gradient magnitude at the centre</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>Each feature measures a contrast difference between adjacent rectangles.</p></div><div class="sc-q" data-answer="3"><p class="sc-text">2. Approximately how many candidate features exist in a 24 × 24 detector window?</p><ul class="sc-options"><li><label><input type="radio" name="sc04_05_1" value="0"> 24</label></li><li><label><input type="radio" name="sc04_05_1" value="1"> 576</label></li><li><label><input type="radio" name="sc04_05_1" value="2"> 6,000</label></li><li><label><input type="radio" name="sc04_05_1" value="3"> over 180,000</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>All scalings and positions of the basic types give more than 180,000; AdaBoost selects about 6,000.</p></div><div class="sc-q" data-answer="1"><p class="sc-text">3. Using the integral image, the sum of any rectangle needs how many lookups?</p><ul class="sc-options"><li><label><input type="radio" name="sc04_05_2" value="0"> One per pixel of the rectangle</label></li><li><label><input type="radio" name="sc04_05_2" value="1"> Four</label></li><li><label><input type="radio" name="sc04_05_2" value="2"> Two</label></li><li><label><input type="radio" name="sc04_05_2" value="3"> It depends on the rectangle&#x27;s size</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>sum = A − B − C + D from the four corner entries, independent of size.</p></div><div class="sc-q" data-answer="1"><p class="sc-text">4. Each entry of the integral image holds</p><ul class="sc-options"><li><label><input type="radio" name="sc04_05_3" value="0"> the pixel value at that position</label></li><li><label><input type="radio" name="sc04_05_3" value="1"> the sum of all pixels above and to the left, inclusive</label></li><li><label><input type="radio" name="sc04_05_3" value="2"> the gradient at that position</label></li><li><label><input type="radio" name="sc04_05_3" value="3"> the row sum only</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>It is built by accumulating down the columns and then along the rows.</p></div><div class="sc-q" data-answer="1"><p class="sc-text">5. AdaBoost is used in Viola-Jones to</p><ul class="sc-options"><li><label><input type="radio" name="sc04_05_4" value="0"> compute the integral image</label></li><li><label><input type="radio" name="sc04_05_4" value="1"> select the most discriminative features and combine them into a strong classifier</label></li><li><label><input type="radio" name="sc04_05_4" value="2"> resize the detector window</label></li><li><label><input type="radio" name="sc04_05_4" value="3"> detect eyes</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>Each rectangle feature is a weak classifier; boosting selects and weights the best ones.</p></div><div class="sc-q" data-answer="1"><p class="sc-text">6. Why are classifiers with the lowest false-negative rate placed early in the cascade?</p><ul class="sc-options"><li><label><input type="radio" name="sc04_05_5" value="0"> Because they are the most accurate overall</label></li><li><label><input type="radio" name="sc04_05_5" value="1"> So that real faces are almost never rejected early while most background windows are discarded quickly</label></li><li><label><input type="radio" name="sc04_05_5" value="2"> Because they are the slowest</label></li><li><label><input type="radio" name="sc04_05_5" value="3"> To reduce the number of stages</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>Early stages must not miss faces; they may pass some background, which later stages reject.</p></div><p><button type="button" class="sc-check">Check answers</button> <span class="sc-score"></span></p></section>
+
+
+  
+  <section class="practice">
+    <h2 id="practice">Practice questions</h2>
+    <p>Question types from the CE6021 question bank that cover this lesson:
+    <code>int_img</code>, <code>haar_feature</code>.</p>
+  </section>
+  
+
+  
+  <section class="credits">
+    <h2 id="image-credits">Image credits</h2>
+    <ul><li><a href="https://commons.wikimedia.org/wiki/File:Friends_become_family.jpg">Friends become family</a>, Satndy, <a href="https://creativecommons.org/licenses/by-sa/4.0">CC BY-SA 4.0</a></li><li><a href="https://commons.wikimedia.org/wiki/File:Jimmy_answering_questions.jpg">Jimmy answering questions</a>, Beatrice Murch, <a href="https://creativecommons.org/licenses/by/3.0">CC BY 3.0</a></li></ul>
+    <p>Other figures are generated from synthetic data by the lesson engines.</p>
+  </section>
+  
+
+  <nav class="pager">
+    <a class="prev" href="04_04.html">&larr; 04.04 Template matching</a>
+    <a class="next" href="04_06.html">04.06 Histogram of oriented gradients &rarr;</a>
+  </nav>
+  <footer class="foot">© Dr Tony Scanlan, University of Limerick. Figures generated by the CE6021 lesson builder.</footer>
+</main>
+</div>
+</body>
+</html>

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CE6021 Machine Vision · Lessons</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar"><a class="brand" href="index.html">CE6021 Machine Vision</a><span class="crumb">Lessons</span></header>
+<main class="lesson index">
+  <h1>CE6021 Machine Vision</h1>
+  <p class="summary">Lessons for the module, section by section. Each lesson has generated figures, worked examples drawn from the question bank, and a short self-check. Lessons not yet published are greyed out.</p>
+  
+  <section class="index-section">
+    <h2>Section 1: Digital images and filtering</h2>
+    <ol class="lesson-list">
+    
+      
+      <li><a href="01_01.html"><b>01.01</b> Digital images</a>
+        <span class="lesson-summary">How a camera turns light into an array of numbers, why colour needs three channels, and what "resolution" does and does not mean.</span></li>
+      
+    
+      
+      <li><a href="01_02.html"><b>01.02</b> Image processing with convolution</a>
+        <span class="lesson-summary">Linear filtering with kernels, the definition of convolution in 1D and 2D, how to do it by hand, and how to work out the output size for valid, same and full padding.</span></li>
+      
+    
+      
+      <li><a href="01_03.html"><b>01.03</b> Image sampling and interpolation</a>
+        <span class="lesson-summary">The sampling theorem and aliasing, why sampled signals have image frequencies, interpolation as convolution, and the practical methods used to resize images.</span></li>
+      
+    
+      
+      <li><a href="01_04.html"><b>01.04</b> Linear filters, image noise and non-linear filters</a>
+        <span class="lesson-summary">The Gaussian kernel and how to sample it, separable convolution, the properties of linear filters, the two common noise models, and the median and bilateral filters that beat linear filters at removing noise.</span></li>
+      
+    
+      
+      <li><a href="01_05.html"><b>01.05</b> Binary images and morphology</a>
+        <span class="lesson-summary">Binary images and structuring elements, the fit/hit/miss rules behind erosion and dilation, opening and closing, the distance transform, connected-component labelling, and the greyscale versions.</span></li>
+      
+    
+      
+      <li><a href="01_06.html"><b>01.06</b> 1D Fourier series and the DFT</a>
+        <span class="lesson-summary">An intuitive introduction to sinusoids, complex sinusoids and positive and negative frequencies, the Fourier series, the discrete Fourier transform with its mirror frequencies and leakage, and the convolution theorem.</span></li>
+      
+    
+      
+      <li><a href="01_07.html"><b>01.07</b> The 2D discrete Fourier transform</a>
+        <span class="lesson-summary">Images decomposed into 2D corrugations, how to read a centred spectrum, leakage and windowing in 2D, why phase matters more than magnitude, and filtering by multiplying spectra including notch filters for periodic noise.</span></li>
+      
+    
+    </ol>
+  </section>
+  
+  <section class="index-section">
+    <h2>Section 2: Edges, corners and segmentation</h2>
+    <ol class="lesson-list">
+    
+      
+      <li><a href="02_01.html"><b>02.01</b> Edge detection</a>
+        <span class="lesson-summary">Edges as rapid intensity changes, derivative-based detectors from Prewitt and Sobel to Gaussian derivatives and the Laplacian, and how to display and combine gradient images.</span></li>
+      
+    
+      
+      <li><a href="02_02.html"><b>02.02</b> The Canny algorithm and the Hough transform</a>
+        <span class="lesson-summary">A multi-stage edge detector that returns thin, reliable edges, and a voting method that fits parameterised lines to the edge points it produces.</span></li>
+      
+    
+      
+      <li><a href="02_03.html"><b>02.03</b> Corner detection</a>
+        <span class="lesson-summary">Corners as points where intensity changes in every direction, the Taylor expansion that leads to the second-moment matrix, the eigenvalue interpretation and the Harris corner response, and what the detector is and is not invariant to.</span></li>
+      
+    
+      
+      <li><a href="02_04.html"><b>02.04</b> Region-based segmentation</a>
+        <span class="lesson-summary">Partitioning an image into regions by thresholding, choosing the threshold automatically with Otsu's method, and the split-and-merge family: the watershed and graph-based segmentation.</span></li>
+      
+    
+      
+      <li><a href="02_05.html"><b>02.05</b> Clustering-based segmentation</a>
+        <span class="lesson-summary">Segmenting by grouping pixels in feature space: k-means and its shortcomings, density estimation with a Parzen window, and the mean-shift procedure that climbs to the modes of the density.</span></li>
+      
+    
+    </ol>
+  </section>
+  
+  <section class="index-section">
+    <h2>Section 3: Keypoints, scale space and descriptors</h2>
+    <ol class="lesson-list">
+    
+      
+      <li><a href="03_01.html"><b>03.01</b> Keypoints and feature detection</a>
+        <span class="lesson-summary">What keypoints are and what they are used for, the properties of a good feature detector, why the Harris detector falls short on scale, and the Laplacian-of-Gaussian blob detector that fixes it.</span></li>
+      
+    
+      
+      <li><a href="03_02.html"><b>03.02</b> Scale spaces</a>
+        <span class="lesson-summary">The Gaussian scale space as a general framework: characteristic scale, the normalised Laplacian, how scale invariance arises, the 26-neighbour search, the Harris-Laplacian detector and the difference-of-Gaussians approximation.</span></li>
+      
+    
+      
+      <li><a href="03_03.html"><b>03.03</b> Keypoint descriptors and matching</a>
+        <span class="lesson-summary">Why keypoints need descriptors, how gradient histograms turn a patch into a vector, how a characteristic orientation makes the descriptor rotation invariant, and how descriptors are matched with brute force and the ratio test.</span></li>
+      
+    
+      
+      <li><a href="03_04.html"><b>03.04</b> SIFT</a>
+        <span class="lesson-summary">The scale-invariant feature transform end to end: a pyramidal DoG scale space, extrema detection and refinement, characteristic orientation, and the 128-element normalised descriptor.</span></li>
+      
+    
+      
+      <li><a href="03_05.html"><b>03.05</b> Scale space and image pyramids (supplementary)</a>
+        <span class="lesson-summary">How Gaussian scale spaces are built efficiently: composing successive blurs, subsampling into octaves, and why this matters for practical detectors.</span></li>
+      
+    
+    </ol>
+  </section>
+  
+  <section class="index-section">
+    <h2>Section 4: Object detection and classification</h2>
+    <ol class="lesson-list">
+    
+      
+      <li><a href="04_01.html"><b>04.01</b> Introduction to object detection</a>
+        <span class="lesson-summary">Image classification and object detection, why real-world recognition is hard, classification and detection metrics, and the sliding-window detector with an image pyramid for scale.</span></li>
+      
+    
+      
+      <li><a href="04_02.html"><b>04.02</b> Machine learning for image recognition</a>
+        <span class="lesson-summary">The supervised learning framework: labelled datasets and how to partition them, features and representations, classifiers and their complexity, bias and variance, overfitting and generalisation, and a note on unsupervised learning.</span></li>
+      
+    
+      
+      <li><a href="04_03.html"><b>04.03</b> Classifiers</a>
+        <span class="lesson-summary">Classification metrics and the precision-recall trade-off, then three classifiers used in vision: k-nearest neighbours, the support vector machine with soft margins and the kernel trick, and the naive Bayes classifier built on Bayes' theorem.</span></li>
+      
+    
+      
+      <li><a href="04_04.html"><b>04.04</b> Template matching</a>
+        <span class="lesson-summary">Detecting a specific object by exhaustive comparison with a template: Euclidean and correlation-based similarity, normalised cross-correlation, and shape-based matching with the distance transform, chamfer distance and Hausdorff distance.</span></li>
+      
+    
+      
+      <li><a href="04_05.html"><b>04.05</b> The Viola-Jones algorithm</a>
+        <span class="lesson-summary">Fast face detection from Haar-like rectangle features computed with the integral image, selected and combined by AdaBoost, and arranged in an attention cascade that rejects background windows early.</span></li>
+      
+    
+      
+      <li><a href="04_06.html"><b>04.06</b> Histogram of oriented gradients</a>
+        <span class="lesson-summary">The HOG representation for pedestrian detection: gradient histograms over cells, block normalisation, the 3780-element descriptor, training with an SVM, and detection with a sliding window over an image pyramid.</span></li>
+      
+    
+    </ol>
+  </section>
+  
+  <section class="index-section">
+    <h2>Section 5: Facial recognition</h2>
+    <ol class="lesson-list">
+    
+      
+      <li><a href="05_01.html"><b>05.01</b> Introduction to facial recognition</a>
+        <span class="lesson-summary">The identification and verification tasks, open and closed sets, why recognising faces is harder than detecting objects, intra-personal variation, constrained versus unconstrained datasets, and the stages of a recognition pipeline.</span></li>
+      
+    
+      
+      <li><a href="05_02.html"><b>05.02</b> Principal component analysis</a>
+        <span class="lesson-summary">The curse of dimensionality, the sample covariance matrix and its eigenvectors, the PCA algorithm, and what PCA is used for: decorrelating data, reducing its dimension and compressing images.</span></li>
+      
+    
+      
+      <li><a href="05_03.html"><b>05.03</b> Eigenfaces</a>
+        <span class="lesson-summary">Applying PCA to a database of faces: why raw pixels fail, what eigenfaces look like, how a face becomes a short weight vector, and how recognition becomes a nearest-neighbour search in eigenface space.</span></li>
+      
+    
+      
+      <li><a href="05_04.html"><b>05.04</b> Linear discriminant analysis</a>
+        <span class="lesson-summary">A dimensionality reduction that uses the class labels: transformed means and scatter, the objective function J(v) that trades separation against spread, and its closed-form solution.</span></li>
+      
+    
+      
+      <li><a href="05_05.html"><b>05.05</b> Fisherfaces</a>
+        <span class="lesson-summary">Linear discriminant analysis applied to facial recognition: the multi-class extension, the singularity of the within-class scatter and the PCA step that fixes it, and why Fisherfaces beat Eigenfaces when illumination varies.</span></li>
+      
+    
+    </ol>
+  </section>
+  
+  <section class="index-section">
+    <h2>Section 6: Bag of features</h2>
+    <ol class="lesson-list">
+    
+      
+      <li><a href="06_01.html"><b>06.01</b> The bag of features representation</a>
+        <span class="lesson-summary">An orderless, high-level description of an image: the bag of words and tf-idf weighting, then building a visual vocabulary by clustering descriptors, assigning terms and forming the term histogram.</span></li>
+      
+    
+      
+      <li><a href="06_02.html"><b>06.02</b> Classification and image retrieval with bag of features</a>
+        <span class="lesson-summary">Training an SVM on term vectors, putting spatial information back with the spatial pyramid, and large-scale retrieval with inverted file indexes and vocabulary trees.</span></li>
+      
+    
+    </ol>
+  </section>
+  
+  <footer class="foot">© Dr Tony Scanlan, University of Limerick.</footer>
+</main>
+</body>
+</html>

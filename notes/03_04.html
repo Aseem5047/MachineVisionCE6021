@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>03.04 SIFT · CE6021 Machine Vision</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+
+<script defer src="site.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="index.html">CE6021 Machine Vision</a>
+  <span class="crumb">Section 3: Keypoints, scale space and descriptors</span>
+</header>
+
+<div class="layout">
+<aside class="sidebar">
+  <nav class="toc">
+    <p class="toc-title">On this page</p>
+    <ul>
+    <li><a href="#learning-outcomes">Learning outcomes</a></li><li><a href="#sift-at-a-high-level">SIFT at a high level</a></li><li><a href="#stage-1-the-scale-space">Stage 1: the scale space</a></li><li><a href="#stage-2-localising-the-extrema">Stage 2: localising the extrema</a></li><li><a href="#stage-3-characteristic-orientation">Stage 3: characteristic orientation</a></li><li><a href="#stage-4-the-normalised-descriptor">Stage 4: the normalised descriptor</a></li><li><a href="#summary">Summary</a></li><li><a href="#self-check">Check your understanding</a></li>
+    </ul>
+  </nav>
+  <nav class="section-nav">
+    <p class="toc-title">Section 3</p>
+    <ul>
+    
+      <li>
+        <a href="03_01.html">1. Keypoints and feature detection</a>
+      </li>
+    
+      <li>
+        <a href="03_02.html">2. Scale spaces</a>
+      </li>
+    
+      <li>
+        <a href="03_03.html">3. Keypoint descriptors and matching</a>
+      </li>
+    
+      <li class="current">
+        <span>4. SIFT</span>
+        
+      </li>
+    
+      <li>
+        <a href="03_05.html">5. Scale space and image pyramids (supplementary)</a>
+      </li>
+    
+    </ul>
+  </nav>
+</aside>
+
+<main class="lesson">
+  <p class="kicker">Lesson 03.04</p>
+  <h1>SIFT</h1>
+  <p class="summary">The scale-invariant feature transform end to end: a pyramidal DoG scale space, extrema detection and refinement, characteristic orientation, and the 128-element normalised descriptor.</p>
+
+  <h2 id="learning-outcomes">Learning outcomes</h2>
+<p>After this lesson you should be able to:</p>
+<ul>
+<li>list the <strong>four stages</strong> of the SIFT algorithm and distinguish its detector from its descriptor;</li>
+<li>describe the <strong>pyramidal scale space</strong> with octaves, scales and auxiliary scales;</li>
+<li>explain <strong>extrema detection</strong>, <strong>localisation</strong> by quadratic interpolation and the rejection of edge responses;</li>
+<li>explain how the <strong>characteristic orientation</strong> and the <strong>128-element descriptor</strong> are formed.</li>
+</ul>
+<p>If you have not yet done so, read the supplementary lesson on scale space and image pyramids (Lesson 3.5) before this one.</p>
+<h2 id="sift-at-a-high-level">SIFT at a high level</h2>
+<p>This lesson follows the detailed article <em>Anatomy of the SIFT method</em> (Rey Otero and Delbracio, 2014); the original algorithm was published by Lowe in 2004. SIFT is perhaps the best known keypoint method in machine vision and produces many high-quality keypoints. It is a <strong>combination of a detector and a descriptor</strong>; the literature sometimes refers to both parts and sometimes only to the descriptor, which can be applied to any image patch without a detection step. The algorithm has four stages:</p>
+<ol>
+<li><strong>scale-space extrema detection</strong>;</li>
+<li><strong>keypoint localisation</strong>, including interpolation of position and scale;</li>
+<li><strong>characteristic orientation</strong> assignment;</li>
+<li>formation of the <strong>normalised descriptor</strong>.</li>
+</ol>
+<figure class="lesson-fig" id="fig-sift_keypoints_photo"><img src="figures/sift_keypoints_photo.png" alt="SIFT keypoints detected by OpenCV. Each keypoint carries a position, a scale (circle radius) and a characteristic orientation (line). SIFT is both a detector and a descriptor; the literature sometimes refers to only one of the two parts."><figcaption><b>Figure 1.</b> SIFT keypoints detected by OpenCV. Each keypoint carries a position, a scale (circle radius) and a characteristic orientation (line). SIFT is both a detector and a descriptor; the literature sometimes refers to only one of the two parts. <span class="credit">Image: <a href="https://commons.wikimedia.org/wiki/File:Detail_Neptune_Trevi_fountain_Rome_Italy.jpg">Detail Neptune Trevi fountain Rome Italy</a>, Jebulon, <a href="http://creativecommons.org/publicdomain/zero/1.0/deed.en">CC0</a>.</span></figcaption></figure>
+<h2 id="stage-1-the-scale-space">Stage 1: the scale space</h2>
+<p>Unlike the simple scale spaces of the previous lessons, SIFT uses a <strong>pyramidal</strong> scale space to minimise computation while covering a good range of σ. The input image is first upsampled to form the first octave, and each subsequent octave is formed by downsampling. There are typically five octaves with <strong>three scales</strong> each. In addition each octave contains three <strong>auxiliary scales</strong>, needed to construct a <strong>difference-of-Gaussians</strong> scale space that approximates the Laplacian: with three extra Gaussian images there are enough DoG images for the three principal scales to have neighbours above and below for the extrema search.</p>
+<figure class="lesson-fig" id="fig-sift_scale_space"><img src="figures/sift_scale_space.png" alt="The SIFT scale space for one octave. Top: Gaussian images at σ₀ 2^(i/3). Bottom: adjacent Gaussians are subtracted to give difference-of-Gaussian images that approximate the Laplacian. Three extra scales are computed so that the three principal DoG scales have neighbours above and below for the extrema search. Further octaves repeat this on the image downsampled by two."><figcaption><b>Figure 2.</b> The SIFT scale space for one octave. Top: Gaussian images at σ₀ 2^(i/3). Bottom: adjacent Gaussians are subtracted to give difference-of-Gaussian images that approximate the Laplacian. Three extra scales are computed so that the three principal DoG scales have neighbours above and below for the extrema search. Further octaves repeat this on the image downsampled by two. <span class="credit">Image: <a href="https://commons.wikimedia.org/wiki/File:Detail_Neptune_Trevi_fountain_Rome_Italy.jpg">Detail Neptune Trevi fountain Rome Italy</a>, Jebulon, <a href="http://creativecommons.org/publicdomain/zero/1.0/deed.en">CC0</a>.</span></figcaption></figure>
+<h3>Extrema</h3>
+<p>Extrema are found in the three principal DoG scales of each octave by the 26-neighbour test: 8 neighbours in the same scale and 9 in each of the scales above and below, with the auxiliary scales supplying the outer neighbours. Lowe found three scales per octave optimal for stable keypoints without excessive computation. Two problems remain: the candidates are sensitive to noise, and their positions are constrained to the sampling grid of the octave.</p>
+<figure class="lesson-fig" id="fig-dog_extrema"><img src="figures/dog_extrema.png" alt="Extrema detection. A sample of the DoG stack is a candidate keypoint if it is larger (or smaller) than all 26 neighbours in the three adjacent scales. The candidates are quantised to the sampling grid and still include weak and edge responses, which the next stage removes."><figcaption><b>Figure 3.</b> Extrema detection. A sample of the DoG stack is a candidate keypoint if it is larger (or smaller) than all 26 neighbours in the three adjacent scales. The candidates are quantised to the sampling grid and still include weak and edge responses, which the next stage removes. <span class="credit">Image: <a href="https://commons.wikimedia.org/wiki/File:Detail_Neptune_Trevi_fountain_Rome_Italy.jpg">Detail Neptune Trevi fountain Rome Italy</a>, Jebulon, <a href="http://creativecommons.org/publicdomain/zero/1.0/deed.en">CC0</a>.</span></figcaption></figure>
+<h2 id="stage-2-localising-the-extrema">Stage 2: localising the extrema</h2>
+<p>To overcome the quantisation of positions to the grid, SIFT refines the position and scale of each candidate by <strong>local quadratic interpolation</strong>: a Taylor expansion fits a continuous quadratic function to the sampled DoG values around the candidate, and the maximum of that function gives the interpolated position and scale. To improve robustness a <strong>magnitude threshold</strong> removes weak extrema, and an <strong>edgeness</strong> measure, similar in spirit to the Harris cornerness, rejects candidates that lie on edges.</p>
+<figure class="lesson-fig" id="fig-quadratic_localisation"><img src="figures/quadratic_localisation.png" alt="Localising the extremum. The DoG is only sampled on a grid, so the true peak generally lies between samples. Fitting a quadratic (a Taylor expansion) to the samples around the candidate and taking its maximum refines the keypoint&#x27;s position and scale to sub-pixel accuracy."><figcaption><b>Figure 4.</b> Localising the extremum. The DoG is only sampled on a grid, so the true peak generally lies between samples. Fitting a quadratic (a Taylor expansion) to the samples around the candidate and taking its maximum refines the keypoint's position and scale to sub-pixel accuracy.</figcaption></figure>
+<h2 id="stage-3-characteristic-orientation">Stage 3: characteristic orientation</h2>
+<p>To make the descriptor rotation invariant each keypoint is assigned a characteristic orientation. Over a patch of size $6 \lambda_{ori} \sigma$, where σ is the keypoint's scale and $\lambda_{ori}$ is a factor close to 1, the gradient magnitudes and directions are computed by finite differences. The magnitudes are weighted by a Gaussian of standard deviation $\lambda_{ori} \sigma$ so that pixels far from the keypoint count less, and accumulated into a <strong>36-bin histogram</strong> over 0 to 2π, which is then smoothed. Every local maximum within 80% of the global maximum becomes an orientation; a keypoint may therefore receive <strong>several descriptors</strong>, one per orientation.</p>
+<figure class="lesson-fig" id="fig-orientation_assignment"><img src="figures/orientation_assignment.png" alt="Characteristic orientation in SIFT. Gradient magnitudes in a patch of size proportional to the keypoint&#x27;s σ are weighted by a Gaussian so that distant pixels count less, accumulated into a 36-bin histogram over 0° to 360°, and smoothed. Every local peak within 80% of the global maximum becomes an orientation; a keypoint with two such peaks gets two descriptors."><figcaption><b>Figure 5.</b> Characteristic orientation in SIFT. Gradient magnitudes in a patch of size proportional to the keypoint's σ are weighted by a Gaussian so that distant pixels count less, accumulated into a 36-bin histogram over 0° to 360°, and smoothed. Every local peak within 80% of the global maximum becomes an orientation; a keypoint with two such peaks gets two descriptors. <span class="credit">Image: <a href="https://commons.wikimedia.org/wiki/File:Detail_Neptune_Trevi_fountain_Rome_Italy.jpg">Detail Neptune Trevi fountain Rome Italy</a>, Jebulon, <a href="http://creativecommons.org/publicdomain/zero/1.0/deed.en">CC0</a>.</span></figcaption></figure>
+<section class="worked-example" id="ex-sift_orient-5"><h4>Worked example 1: SIFT Orientation Histogram</h4><div class="example-q"><p>The following $4 \times 4$ image patch has gradient magnitudes $\mathbf{M}$ and gradient directions $\mathbf{D}$ (in degrees):</p>
+<p>$$\mathbf{M} = \begin{bmatrix}
+    1 &amp; 11 &amp; 7 &amp; 9 \\
+    19 &amp; 5 &amp; 11 &amp; 7 \\
+    6 &amp; 17 &amp; 4 &amp; 7 \\
+    3 &amp; 3 &amp; 6 &amp; 14
+\end{bmatrix}$$</p>
+<p>$$\mathbf{D} = \begin{bmatrix}
+    208 &amp; 161 &amp; 61 &amp; 287 \\
+    287 &amp; 84 &amp; 21 &amp; 115 \\
+    52 &amp; 287 &amp; 187 &amp; 182 \\
+    104 &amp; 182 &amp; 348 &amp; 85
+\end{bmatrix}$$</p>
+<p>Bins are 45° wide: Bin 0 = [0°, 45°), Bin 1 = [45°, 90°), Bin 2 = [90°, 135°), Bin 3 = [135°, 180°), Bin 4 = [180°, 225°), Bin 5 = [225°, 270°), Bin 6 = [270°, 315°), Bin 7 = [315°, 360°).</p>
+<p>For each pixel, compute $\text{bin} = \lfloor \text{direction} / 45 \rfloor$ and accumulate its magnitude into that bin.</p>
+<p><strong>(a)</strong> Build the 8-bin orientation histogram (total magnitude per bin).</p>
+<p><strong>(b)</strong> Identify the dominant orientation bin.</p>
+</div><details class="example-sol"><summary>Show the solution</summary><p><strong>Step 1 – Bin assignment for each pixel:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Row</th>
+<th>Col</th>
+<th>Magnitude</th>
+<th>Direction</th>
+<th>Bin</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>208°</td>
+<td>4</td>
+</tr>
+<tr>
+<td>0</td>
+<td>1</td>
+<td>11</td>
+<td>161°</td>
+<td>3</td>
+</tr>
+<tr>
+<td>0</td>
+<td>2</td>
+<td>7</td>
+<td>61°</td>
+<td>1</td>
+</tr>
+<tr>
+<td>0</td>
+<td>3</td>
+<td>9</td>
+<td>287°</td>
+<td>6</td>
+</tr>
+<tr>
+<td>1</td>
+<td>0</td>
+<td>19</td>
+<td>287°</td>
+<td>6</td>
+</tr>
+<tr>
+<td>1</td>
+<td>1</td>
+<td>5</td>
+<td>84°</td>
+<td>1</td>
+</tr>
+<tr>
+<td>1</td>
+<td>2</td>
+<td>11</td>
+<td>21°</td>
+<td>0</td>
+</tr>
+<tr>
+<td>1</td>
+<td>3</td>
+<td>7</td>
+<td>115°</td>
+<td>2</td>
+</tr>
+<tr>
+<td>2</td>
+<td>0</td>
+<td>6</td>
+<td>52°</td>
+<td>1</td>
+</tr>
+<tr>
+<td>2</td>
+<td>1</td>
+<td>17</td>
+<td>287°</td>
+<td>6</td>
+</tr>
+<tr>
+<td>2</td>
+<td>2</td>
+<td>4</td>
+<td>187°</td>
+<td>4</td>
+</tr>
+<tr>
+<td>2</td>
+<td>3</td>
+<td>7</td>
+<td>182°</td>
+<td>4</td>
+</tr>
+<tr>
+<td>3</td>
+<td>0</td>
+<td>3</td>
+<td>104°</td>
+<td>2</td>
+</tr>
+<tr>
+<td>3</td>
+<td>1</td>
+<td>3</td>
+<td>182°</td>
+<td>4</td>
+</tr>
+<tr>
+<td>3</td>
+<td>2</td>
+<td>6</td>
+<td>348°</td>
+<td>7</td>
+</tr>
+<tr>
+<td>3</td>
+<td>3</td>
+<td>14</td>
+<td>85°</td>
+<td>1</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Step 2 – Histogram summary:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Bin</th>
+<th>Range</th>
+<th>Total magnitude</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>[0°, 45°)</td>
+<td>11</td>
+</tr>
+<tr>
+<td>1</td>
+<td>[45°, 90°)</td>
+<td>32</td>
+</tr>
+<tr>
+<td>2</td>
+<td>[90°, 135°)</td>
+<td>10</td>
+</tr>
+<tr>
+<td>3</td>
+<td>[135°, 180°)</td>
+<td>11</td>
+</tr>
+<tr>
+<td>4</td>
+<td>[180°, 225°)</td>
+<td>15</td>
+</tr>
+<tr>
+<td>5</td>
+<td>[225°, 270°)</td>
+<td>0</td>
+</tr>
+<tr>
+<td>6</td>
+<td>[270°, 315°)</td>
+<td>45</td>
+</tr>
+<tr>
+<td>7</td>
+<td>[315°, 360°)</td>
+<td>6</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Step 3 – Dominant orientation:</strong></p>
+<p>Bin 6 ([270°, 315°)) has the highest total: <strong>45</strong></p>
+</details></section>
+<h2 id="stage-4-the-normalised-descriptor">Stage 4: the normalised descriptor</h2>
+<p>The descriptor captures the local spatial distribution of gradient orientations. A patch of size $2 \lambda_{descr} \sigma$ is taken around the keypoint, so larger keypoints use larger patches. Gradients are computed by finite differences, their directions are normalised relative to the characteristic orientation, and a second Gaussian window of standard deviation $\lambda_{descr} \sigma$ weights the magnitudes. The patch is divided into a <strong>4 × 4 array of cells</strong>, each with an <strong>8-bin</strong> histogram.</p>
+<p>The contribution of each pixel is split <strong>bilinearly</strong> between the four nearest histograms, according to the pixel's distance from each histogram's centre, and <strong>linearly</strong> between the two nearest bins within a histogram. The sixteen histograms are concatenated into a <strong>128-element</strong> vector, which is then <strong>saturated</strong> (values capped at 0.2) and <strong>renormalised</strong>; this gives the descriptor some invariance to illumination.</p>
+<figure class="lesson-fig" id="fig-descriptor_layout"><img src="figures/descriptor_layout.png" alt="The SIFT descriptor. (a) The patch around the keypoint, rotated to its characteristic orientation, is divided into a 4 × 4 grid of cells with an 8-bin histogram each, drawn here as arrows. (b) Flattened, the 16 histograms form a 128-element vector, which is capped at 0.2 and normalised for illumination invariance. (c) Each pixel&#x27;s magnitude is split bilinearly between the four nearest histograms (weights shown), and linearly between the two nearest bins."><figcaption><b>Figure 6.</b> The SIFT descriptor. (a) The patch around the keypoint, rotated to its characteristic orientation, is divided into a 4 × 4 grid of cells with an 8-bin histogram each, drawn here as arrows. (b) Flattened, the 16 histograms form a 128-element vector, which is capped at 0.2 and normalised for illumination invariance. (c) Each pixel's magnitude is split bilinearly between the four nearest histograms (weights shown), and linearly between the two nearest bins. <span class="credit">Image: <a href="https://commons.wikimedia.org/wiki/File:Detail_Neptune_Trevi_fountain_Rome_Italy.jpg">Detail Neptune Trevi fountain Rome Italy</a>, Jebulon, <a href="http://creativecommons.org/publicdomain/zero/1.0/deed.en">CC0</a>.</span></figcaption></figure>
+<section class="worked-example" id="ex-sift_bin_lin-8"><h4>Worked example 2: SIFT Bilinear Distribution</h4><div class="example-q"><blockquote>
+<p><strong>Note:</strong> Image coordinate system is used — the origin is at the <strong>top-left</strong>, and $y$ increases <strong>downward</strong>.</p>
+</blockquote>
+<p>In the SIFT descriptor, gradient magnitudes at pixel positions are distributed to nearby spatial histogram bins using bilinear weighting.
+A pixel at interior position $(x_i, y_j)$ $= (0.7,\, 1.8)$ has gradient magnitude $M = 15$.</p>
+<p>Determine the magnitude contribution $M_c$ allocated to each corner of the $2\times 2$ bin grid (see plot).</p>
+<p><img src="figures/ex_sift_bin_lin_8.png" alt="SIFT bilinear distribution grid" /></p>
+<p>Each corner $c$ receives a share of $M$ proportional to the area $A_c$ of the sub-rectangle <strong>diagonally opposite</strong> corner $c$:</p>
+<p>$$M_c = M \cdot \frac{A_c}{\displaystyle\sum_c A_c}, \qquad \sum_c A_c = 4$$</p>
+</div><details class="example-sol"><summary>Show the solution</summary><p><strong>Step 1 – Compute the four sub-rectangle areas.</strong></p>
+<p>The pixel at $(x_i, y_j)$ divides the $2\times 2$ cell into four rectangles. The area diagonally opposite each corner is:</p>
+<p>$A_{(0,0)}$ (top-left, opposite = bottom-right): $A = (2 - 0.7)(2 - 1.8) = 0.26$
+$A_{(2,0)}$ (top-right, opposite = bottom-left): $A = 0.7(2 - 1.8) = 0.14$
+$A_{(0,2)}$ (bottom-left, opposite = top-right): $A = (2 - 0.7) \cdot 1.8 = 2.34$
+$A_{(2,2)}$ (bottom-right, opposite = top-left): $A = 0.7 \cdot 1.8 = 1.26$</p>
+<p>Check: $0.26 + 0.14 + 2.34 + 1.26 = 4.0$ ✓</p>
+<p><strong>Step 2 – Distribute magnitude $M$ to each corner.</strong></p>
+<p>$M = 15$, total area $= 4$:</p>
+<p>$M_{(0,0)} = 15 \times 0.26 / 4 = 0.975$
+$M_{(2,0)} = 15 \times 0.14 / 4 = 0.525$
+$M_{(0,2)} = 15 \times 2.34 / 4 = 8.775$
+$M_{(2,2)} = 15 \times 1.26 / 4 = 4.725$</p>
+<p>Check: $0.975 + 0.525 + 8.775 + 4.725 = 15.0 = M$ ✓</p>
+</details></section>
+<h2 id="summary">Summary</h2>
+<p>SIFT is a very good descriptor because it is invariant to <strong>scale</strong> (through scale space), to <strong>rotation</strong> (through the characteristic orientation) and to <strong>illumination</strong> (through normalisation), and it is robust to viewing-angle changes of up to about 40°. Thanks to the pyramidal scale space its computational cost is low, and the DoG detector finds enough keypoints to match partially occluded objects. Two photographs of the same fountain taken by different people, at different scales, viewpoints and lighting, can be matched keypoint by keypoint. Finally, SIFT descriptors can be computed on any patch: densely sampled descriptors, without a detector, are the input to the bag-of-features method of Section 6.</p>
+<figure class="lesson-fig" id="fig-sift_two_views"><img src="figures/sift_two_views.png" alt="SIFT in practice. Two independent photographs of the same fountain, at different scales, viewpoints and lighting, are matched by their SIFT descriptors. Scale invariance comes from the scale space, rotation invariance from the characteristic orientation and illumination invariance from descriptor normalisation."><figcaption><b>Figure 7.</b> SIFT in practice. Two independent photographs of the same fountain, at different scales, viewpoints and lighting, are matched by their SIFT descriptors. Scale invariance comes from the scale space, rotation invariance from the characteristic orientation and illumination invariance from descriptor normalisation. <span class="credit">Image: <a href="https://commons.wikimedia.org/wiki/File:Trevi_fountain_in_Rome.jpg">Trevi fountain in Rome</a>, High Contrast, <a href="https://creativecommons.org/licenses/by/3.0/de/deed.en">CC BY 3.0 de</a>; <a href="https://commons.wikimedia.org/wiki/File:Detail_Neptune_Trevi_fountain_Rome_Italy.jpg">Detail Neptune Trevi fountain Rome Italy</a>, Jebulon, <a href="http://creativecommons.org/publicdomain/zero/1.0/deed.en">CC0</a>.</span></figcaption></figure>
+<section class="selfcheck"><h2 id="self-check">Check your understanding</h2><div class="sc-q" data-answer="1"><p class="sc-text">1. In what order do the four stages of SIFT occur?</p><ul class="sc-options"><li><label><input type="radio" name="sc03_04_0" value="0"> descriptor, orientation, localisation, extrema</label></li><li><label><input type="radio" name="sc03_04_0" value="1"> extrema detection, localisation, orientation assignment, descriptor</label></li><li><label><input type="radio" name="sc03_04_0" value="2"> orientation, extrema, descriptor, localisation</label></li><li><label><input type="radio" name="sc03_04_0" value="3"> localisation, extrema, descriptor, orientation</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>Keypoints are detected as scale-space extrema, refined, given an orientation and finally described.</p></div><div class="sc-q" data-answer="1"><p class="sc-text">2. Why does each SIFT octave compute three extra (auxiliary) Gaussian scales?</p><ul class="sc-options"><li><label><input type="radio" name="sc03_04_1" value="0"> To increase the image resolution</label></li><li><label><input type="radio" name="sc03_04_1" value="1"> So that the DoG images of the three principal scales have neighbours above and below for the 26-neighbour search</label></li><li><label><input type="radio" name="sc03_04_1" value="2"> To remove edges</label></li><li><label><input type="radio" name="sc03_04_1" value="3"> To reduce memory use</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>Extrema are found in three DoG scales per octave; the auxiliary scales supply the outer DoG images used only as neighbours.</p></div><div class="sc-q" data-answer="1"><p class="sc-text">3. What does quadratic interpolation achieve in the localisation stage?</p><ul class="sc-options"><li><label><input type="radio" name="sc03_04_2" value="0"> It removes duplicate keypoints</label></li><li><label><input type="radio" name="sc03_04_2" value="1"> It refines the keypoint&#x27;s position and scale to values between grid samples</label></li><li><label><input type="radio" name="sc03_04_2" value="2"> It computes the descriptor</label></li><li><label><input type="radio" name="sc03_04_2" value="3"> It sharpens the image</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>A Taylor expansion fits a quadratic to the sampled DoG values and its maximum gives sub-pixel position and scale.</p></div><div class="sc-q" data-answer="1"><p class="sc-text">4. A keypoint&#x27;s orientation histogram has two peaks at 92% and 85% of the maximum. SIFT</p><ul class="sc-options"><li><label><input type="radio" name="sc03_04_3" value="0"> keeps only the largest</label></li><li><label><input type="radio" name="sc03_04_3" value="1"> assigns both orientations and creates two descriptors for the keypoint</label></li><li><label><input type="radio" name="sc03_04_3" value="2"> averages them</label></li><li><label><input type="radio" name="sc03_04_3" value="3"> discards the keypoint</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>Every local peak within 80% of the global maximum becomes a characteristic orientation.</p></div><div class="sc-q" data-answer="1"><p class="sc-text">5. The SIFT descriptor has 128 elements because</p><ul class="sc-options"><li><label><input type="radio" name="sc03_04_4" value="0"> it uses 128 pixels</label></li><li><label><input type="radio" name="sc03_04_4" value="1"> it has a 4 × 4 grid of cells with 8 orientation bins each: 16 × 8 = 128</label></li><li><label><input type="radio" name="sc03_04_4" value="2"> there are 128 keypoints</label></li><li><label><input type="radio" name="sc03_04_4" value="3"> it uses 128 scales</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>Sixteen 8-bin histograms are concatenated, then capped at 0.2 and renormalised.</p></div><div class="sc-q" data-answer="1"><p class="sc-text">6. Which step gives SIFT some invariance to illumination changes?</p><ul class="sc-options"><li><label><input type="radio" name="sc03_04_5" value="0"> The Gaussian pyramid</label></li><li><label><input type="radio" name="sc03_04_5" value="1"> Saturating the descriptor at 0.2 and renormalising it</label></li><li><label><input type="radio" name="sc03_04_5" value="2"> The 26-neighbour search</label></li><li><label><input type="radio" name="sc03_04_5" value="3"> Bilinear splitting between histograms</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>Normalisation removes overall gradient scaling caused by brightness changes, and capping limits the effect of saturated gradients.</p></div><p><button type="button" class="sc-check">Check answers</button> <span class="sc-score"></span></p></section>
+
+
+  
+  <section class="practice">
+    <h2 id="practice">Practice questions</h2>
+    <p>Question types from the CE6021 question bank that cover this lesson:
+    <code>sift_bin_lin</code>, <code>sift_orient</code>.</p>
+  </section>
+  
+
+  
+  <section class="credits">
+    <h2 id="image-credits">Image credits</h2>
+    <ul><li><a href="https://commons.wikimedia.org/wiki/File:Trevi_fountain_in_Rome.jpg">Trevi fountain in Rome</a>, High Contrast, <a href="https://creativecommons.org/licenses/by/3.0/de/deed.en">CC BY 3.0 de</a></li><li><a href="https://commons.wikimedia.org/wiki/File:Detail_Neptune_Trevi_fountain_Rome_Italy.jpg">Detail Neptune Trevi fountain Rome Italy</a>, Jebulon, <a href="http://creativecommons.org/publicdomain/zero/1.0/deed.en">CC0</a></li></ul>
+    <p>Other figures are generated from synthetic data by the lesson engines.</p>
+  </section>
+  
+
+  <nav class="pager">
+    <a class="prev" href="03_03.html">&larr; 03.03 Keypoint descriptors and matching</a>
+    <a class="next" href="03_05.html">03.05 Scale space and image pyramids (supplementary) &rarr;</a>
+  </nav>
+  <footer class="foot">© Dr Tony Scanlan, University of Limerick. Figures generated by the CE6021 lesson builder.</footer>
+</main>
+</div>
+</body>
+</html>

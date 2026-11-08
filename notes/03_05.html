@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>03.05 Scale space and image pyramids (supplementary) · CE6021 Machine Vision</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer="" src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer="" src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+
+<script defer="" src="site.js"></script>
+</head><body><header class="topbar"><a class="brand" href="index.html">CE6021 Machine Vision</a> <span class="crumb">Section 3: Keypoints, scale space and descriptors</span></header>
+<div class="layout">
+<aside class="sidebar"><nav class="toc">
+<p class="toc-title">On this page</p>
+<ul>
+<li><a href="#learning-outcomes">Learning outcomes</a></li>
+<li><a href="#building-a-scale-space-efficiently">Building a scale space efficiently</a></li>
+<li><a href="#the-gaussian-image-pyramid">The Gaussian image pyramid</a></li>
+<li><a href="#scale-space-with-an-image-pyramid">Scale space with an image pyramid</a></li>
+<li><a href="#self-check">Check your understanding</a></li>
+</ul>
+</nav><nav class="section-nav">
+<p class="toc-title">Section 3</p>
+<ul>
+<li><a href="03_01.html">1. Keypoints and feature detection</a></li>
+<li><a href="03_02.html">2. Scale spaces</a></li>
+<li><a href="03_03.html">3. Keypoint descriptors and matching</a></li>
+<li><a href="03_04.html">4. SIFT</a></li>
+<li class="current"><span>5. Scale space and image pyramids (supplementary)</span></li>
+</ul>
+</nav></aside>
+<main class="lesson">
+<p class="kicker">Lesson 03.05</p>
+<h1>Scale space and image pyramids (supplementary)</h1>
+<p class="summary">How Gaussian scale spaces are built efficiently: composing successive blurs, subsampling into octaves, and why this matters for practical detectors.</p>
+<h2 id="learning-outcomes">Learning outcomes</h2>
+<p>After this lesson you should be able to:</p>
+<ul>
+<li>use the <strong>composition rule</strong> for successive Gaussian convolutions;</li>
+<li>explain why a <strong>Gaussian pyramid</strong> subsamples after blurring;</li>
+<li>distinguish <strong>scales</strong> from <strong>octaves</strong> in a scale space built with a pyramid;</li>
+<li>state the cost advantage and the price paid in keypoint localisation.</li>
+</ul>
+<h2 id="building-a-scale-space-efficiently">Building a scale space efficiently</h2>
+<p>The naïve way to build a scale space is to convolve the original image with successively larger Gaussian kernels. The cost of the large kernels makes this unusable in a practical detector, which may have to run in real time on an embedded device. The escape is a property of the Gaussian: convolving two Gaussians gives another Gaussian,</p>
+<p>$$G(\sigma_1) * G(\sigma_2) = G\!\left(\sqrt{\sigma_1^2 + \sigma_2^2}\right). \tag{1}$$</p>
+<p>So the level $L(\mathbf{x}; \sigma_3)$ can be formed either directly from the image with a Gaussian of width σ₃, or from the existing level $L(\mathbf{x}; \sigma_1)$ with a Gaussian of width σ₂. Successive <strong>small</strong> kernels applied to the previous level replace large kernels applied to the original image.</p>
+<figure class="lesson-fig" id="fig-sigma_composition"><img src="figures/sigma_composition.png" alt="Successive Gaussian convolutions combine: G(σ₁) ∗ G(σ₂) = G(√(σ₁² + σ₂²)). A scale-space level L(x; σ₃) can therefore be computed from the previous level with a small kernel instead of from the original image with a large one, and the two results agree to rounding error.">
+<figcaption><b>Figure 1.</b> Successive Gaussian convolutions combine: G(σ₁) ∗ G(σ₂) = G(√(σ₁² + σ₂²)). A scale-space level L(x; σ₃) can therefore be computed from the previous level with a small kernel instead of from the original image with a large one, and the two results agree to rounding error. <span class="credit">Image: <a href="https://commons.wikimedia.org/wiki/File:Six_weeks_old_cat_(aka).jpg">Six weeks old cat (aka)</a>, André Karwath, <a href="https://creativecommons.org/licenses/by-sa/2.5">CC BY-SA 2.5</a>.</span></figcaption>
+</figure>
+<h2 id="the-gaussian-image-pyramid">The Gaussian image pyramid</h2>
+<p>When a scale space is built by convolution alone, every level has the size of the original image. But heavily blurred images have lost their fine detail and contain redundant information, so they can be <strong>subsampled</strong> without losing what is important at that scale. Subsampling reduces the number of pixels at each level, which means that smaller Gaussian kernels can be used and less storage is needed; care is needed to sample the subsampled kernels correctly.</p>
+<figure class="lesson-fig" id="fig-gaussian_pyramid"><img src="figures/gaussian_pyramid.png" alt="A Gaussian image pyramid. Each level is the previous one blurred with a Gaussian and then subsampled by two, shown here at true relative size. Blurring before subsampling prevents aliasing; the blurred image contains redundant information, so fewer samples suffice to represent it.">
+<figcaption><b>Figure 2.</b> A Gaussian image pyramid. Each level is the previous one blurred with a Gaussian and then subsampled by two, shown here at true relative size. Blurring before subsampling prevents aliasing; the blurred image contains redundant information, so fewer samples suffice to represent it. <span class="credit">Image: <a href="https://commons.wikimedia.org/wiki/File:Six_weeks_old_cat_(aka).jpg">Six weeks old cat (aka)</a>, André Karwath, <a href="https://creativecommons.org/licenses/by-sa/2.5">CC BY-SA 2.5</a>.</span></figcaption>
+</figure>
+<h2 id="scale-space-with-an-image-pyramid">Scale space with an image pyramid</h2>
+<p>A computationally efficient scale space combines successive convolution with subsampling. Each new blurred image is a <strong>scale</strong>; the set of scales sharing one subsampling level is an <strong>octave</strong>. An image pyramid on its own is a separate concept: a series of successively smaller versions of an image formed by blurring and subsampling, used for example by the sliding-window object detectors of Section 4 to give them scale invariance. The disadvantage of building scale space this way is that keypoints found in a subsampled octave need an extra interpolation step to place them in the original image.</p>
+<figure class="lesson-fig" id="fig-octave_pyramid"><img src="figures/octave_pyramid.png" alt="Scale space with an image pyramid. Within an octave (a row) each scale is obtained from the previous one by a small incremental blur. When the blur reaches twice the octave's starting σ the image is subsampled by two to start the next octave, so σ doubles while the kernel stays small. Images are displayed at the same size; their pixel counts halve per octave.">
+<figcaption><b>Figure 3.</b> Scale space with an image pyramid. Within an octave (a row) each scale is obtained from the previous one by a small incremental blur. When the blur reaches twice the octave's starting σ the image is subsampled by two to start the next octave, so σ doubles while the kernel stays small. Images are displayed at the same size; their pixel counts halve per octave. <span class="credit">Image: <a href="https://commons.wikimedia.org/wiki/File:Six_weeks_old_cat_(aka).jpg">Six weeks old cat (aka)</a>, André Karwath, <a href="https://creativecommons.org/licenses/by-sa/2.5">CC BY-SA 2.5</a>.</span></figcaption>
+</figure>
+<p>A well-known example is the pyramid of Crowley (2002), which uses only a Gaussian of σ = 1: the different amounts of smoothing come from successive convolutions, the difference of Gaussians approximates the Laplacian for feature detection, and after each downsampling the effective σ doubles.</p>
+<figure class="lesson-fig" id="fig-pyramid_cost"><img src="figures/pyramid_cost.png" alt="Why pyramids matter for real-time detectors. Reaching a large σ directly needs a kernel of 6σ + 1 samples over every pixel of the full image; in a pyramid the kernel stays small and each octave has a quarter as many pixels as the last. The price is an extra interpolation step to place keypoints found in subsampled octaves back in the original image.">
+<figcaption><b>Figure 4.</b> Why pyramids matter for real-time detectors. Reaching a large σ directly needs a kernel of 6σ + 1 samples over every pixel of the full image; in a pyramid the kernel stays small and each octave has a quarter as many pixels as the last. The price is an extra interpolation step to place keypoints found in subsampled octaves back in the original image.</figcaption>
+</figure>
+<section class="selfcheck">
+<h2 id="self-check">Check your understanding</h2>
+<div class="sc-q" data-answer="1">
+<p class="sc-text">1. An image is blurred with σ = 3 and then with σ = 4. The result equals a single blur with σ =</p>
+<ul class="sc-options">
+<li><label><input type="radio" name="sc03_05_0" value="0"> 7</label></li>
+<li><label><input type="radio" name="sc03_05_0" value="1"> 5</label></li>
+<li><label><input type="radio" name="sc03_05_0" value="2"> 12</label></li>
+<li><label><input type="radio" name="sc03_05_0" value="3"> 3.5</label></li>
+</ul>
+<p class="sc-feedback" hidden=""></p>
+<p class="sc-explain" hidden="">Successive Gaussians compose as √(σ₁² + σ₂²) = √(9 + 16) = 5.</p>
+</div>
+<div class="sc-q" data-answer="1">
+<p class="sc-text">2. Why can a heavily blurred image be subsampled without losing important information?</p>
+<ul class="sc-options">
+<li><label><input type="radio" name="sc03_05_1" value="0"> Because blurring makes the image binary</label></li>
+<li><label><input type="radio" name="sc03_05_1" value="1"> Because the blur has removed the fine detail, so the remaining content is represented by fewer samples</label></li>
+<li><label><input type="radio" name="sc03_05_1" value="2"> Because subsampling sharpens it again</label></li>
+<li><label><input type="radio" name="sc03_05_1" value="3"> It cannot be subsampled</label></li>
+</ul>
+<p class="sc-feedback" hidden=""></p>
+<p class="sc-explain" hidden="">Blurring band-limits the image, which is exactly the condition for safe subsampling from the sampling theorem.</p>
+</div>
+<div class="sc-q" data-answer="1">
+<p class="sc-text">3. In a scale space built with a pyramid, an octave is</p>
+<ul class="sc-options">
+<li><label><input type="radio" name="sc03_05_2" value="0"> a single blurred image</label></li>
+<li><label><input type="radio" name="sc03_05_2" value="1"> the set of scales that share one subsampling level</label></li>
+<li><label><input type="radio" name="sc03_05_2" value="2"> eight keypoints</label></li>
+<li><label><input type="radio" name="sc03_05_2" value="3"> the original image</label></li>
+</ul>
+<p class="sc-feedback" hidden=""></p>
+<p class="sc-explain" hidden="">Within an octave scales are produced by successive blurs; a subsampling by two starts the next octave.</p>
+</div>
+<div class="sc-q" data-answer="1">
+<p class="sc-text">4. What extra step is needed when keypoints are found in a subsampled octave?</p>
+<ul class="sc-options">
+<li><label><input type="radio" name="sc03_05_3" value="0"> Re-running the detector at full resolution</label></li>
+<li><label><input type="radio" name="sc03_05_3" value="1"> Interpolating their positions back to the coordinates of the original image</label></li>
+<li><label><input type="radio" name="sc03_05_3" value="2"> Discarding them</label></li>
+<li><label><input type="radio" name="sc03_05_3" value="3"> Rotating them</label></li>
+</ul>
+<p class="sc-feedback" hidden=""></p>
+<p class="sc-explain" hidden="">Positions in a subsampled image must be scaled and interpolated to locate the keypoint in the full-size image.</p>
+</div>
+<p><button type="button" class="sc-check">Check answers</button> <span class="sc-score"></span></p>
+</section>
+<section class="credits">
+<h2 id="image-credits">Image credits</h2>
+<ul>
+<li><a href="https://commons.wikimedia.org/wiki/File:Six_weeks_old_cat_(aka).jpg">Six weeks old cat (aka)</a>, André Karwath, <a href="https://creativecommons.org/licenses/by-sa/2.5">CC BY-SA 2.5</a></li>
+</ul>
+<p>Other figures are generated from synthetic data by the lesson engines.</p>
+</section>
+<nav class="pager"><a class="prev" href="03_04.html">← 03.04 SIFT</a> 04.01 Introduction to object detection →</nav><footer class="foot">© Dr Tony Scanlan, University of Limerick. Figures generated by the CE6021 lesson builder.</footer></main></div></body></html>

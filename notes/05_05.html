@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>05.05 Fisherfaces · CE6021 Machine Vision</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+
+<script defer src="site.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="index.html">CE6021 Machine Vision</a>
+  <span class="crumb">Section 5: Facial recognition</span>
+</header>
+
+<div class="layout">
+<aside class="sidebar">
+  <nav class="toc">
+    <p class="toc-title">On this page</p>
+    <ul>
+    <li><a href="#learning-outcomes">Learning outcomes</a></li><li><a href="#fisherfaces">Fisherfaces</a></li><li><a href="#multi-class-lda">Multi-class LDA</a></li><li><a href="#the-solution-and-the-singularity-problem">The solution and the singularity problem</a></li><li><a href="#the-fisherface-algorithm">The FisherFace algorithm</a></li><li><a href="#eigenfaces-versus-fisherfaces">Eigenfaces versus Fisherfaces</a></li><li><a href="#self-check">Check your understanding</a></li>
+    </ul>
+  </nav>
+  <nav class="section-nav">
+    <p class="toc-title">Section 5</p>
+    <ul>
+    
+      <li>
+        <a href="05_01.html">1. Introduction to facial recognition</a>
+      </li>
+    
+      <li>
+        <a href="05_02.html">2. Principal component analysis</a>
+      </li>
+    
+      <li>
+        <a href="05_03.html">3. Eigenfaces</a>
+      </li>
+    
+      <li>
+        <a href="05_04.html">4. Linear discriminant analysis</a>
+      </li>
+    
+      <li class="current">
+        <span>5. Fisherfaces</span>
+        
+      </li>
+    
+    </ul>
+  </nav>
+</aside>
+
+<main class="lesson">
+  <p class="kicker">Lesson 05.05</p>
+  <h1>Fisherfaces</h1>
+  <p class="summary">Linear discriminant analysis applied to facial recognition: the multi-class extension, the singularity of the within-class scatter and the PCA step that fixes it, and why Fisherfaces beat Eigenfaces when illumination varies.</p>
+
+  <h2 id="learning-outcomes">Learning outcomes</h2>
+<p>After this lesson you should be able to:</p>
+<ul>
+<li>extend LDA to <strong>more than two classes</strong> and write the multi-class $S_B$;</li>
+<li>explain the <strong>singularity</strong> problem for image data and the role of the preliminary <strong>PCA</strong> step;</li>
+<li>state the <strong>Fisherface</strong> enrolment and query algorithms and the <strong>C − 1</strong> limit on the number of components;</li>
+<li>explain why Fisherfaces outperform Eigenfaces when <strong>illumination</strong> varies.</li>
+</ul>
+<h2 id="fisherfaces">Fisherfaces</h2>
+<p>The Fisherfaces method takes its name from Fisher, who proposed linear discriminant analysis in the 1930s. In facial recognition the goal is to distinguish images of different people while still recognising the same person in two distinct images. We have already seen the Eigenface method, where PCA reduces the dimensionality by finding the principal components along the directions of maximum variance. But if the <strong>intra-class variation is greater than the inter-class variation</strong>, the Eigenface method may work poorly: changes in illumination and expression can dominate the inter-class differences, so after PCA the classifier cannot separate the different faces.</p>
+<p>Using linear discriminant analysis instead, the class labels let us find a transformation that <strong>preserves discrimination</strong>. Facial recognition usually has many individuals to identify, so the number of classes is large and we must extend the two-class algorithm of the last lesson.</p>
+<h2 id="multi-class-lda">Multi-class LDA</h2>
+<p>With three classes of two-dimensional data we can still transform onto a line $v$ that best discriminates between them, and the principle is unchanged: maximise the between-class scatter and minimise the within-class scatter of the transformed data, using the same objective function</p>
+<p>$$J(v) = \frac{v^{T} S_B v}{v^{T} S_W v}. \tag{1}$$</p>
+<p>The definitions of the two terms change slightly. In the two-class case $S_B$ came from the difference of the two class means. With multiple classes it is defined instead from the <strong>weighted deviation of each class mean $\mu_j$ from the global mean $\mu$</strong>, the weight being $n_j$, the number of data points in class $j$, so classes with more points count for more:</p>
+<p>$$S_B = \sum_{j=1}^{C} n_j (\mu_j - \mu)(\mu_j - \mu)^{T}. \tag{2}$$</p>
+<p>The within-class scatter $S_W$ is still produced by summing the scatter matrices of each class.</p>
+<figure class="lesson-fig" id="fig-multiclass_lda"><img src="figures/multiclass_lda.png" alt="Multi-class LDA. The objective is unchanged, maximise the between-class scatter over the within-class scatter, but with more than two classes the between-class scatter is defined from the deviation of each class mean from the global mean, weighted by the number of points in that class. The within-class scatter is still the sum of the per-class scatter matrices. With C classes at most C − 1 directions carry non-zero eigenvalues, so here two."><figcaption><b>Figure 1.</b> Multi-class LDA. The objective is unchanged, maximise the between-class scatter over the within-class scatter, but with more than two classes the between-class scatter is defined from the deviation of each class mean from the global mean, weighted by the number of points in that class. The within-class scatter is still the sum of the per-class scatter matrices. With C classes at most C − 1 directions carry non-zero eigenvalues, so here two.</figcaption></figure>
+<h2 id="the-solution-and-the-singularity-problem">The solution and the singularity problem</h2>
+<p>As in the two-class case, maximising $J(v)$ is a <strong>generalised eigenvalue problem</strong>,</p>
+<p>$$S_B\, v = \lambda\, S_W\, v, \tag{3}$$</p>
+<p>which becomes a standard eigenvalue problem for $S_W^{-1} S_B$ and can be solved numerically. That is only possible if the inverse of $S_W$ exists, that is if $S_W$ is <strong>non-singular</strong>. We can test this by computing the <strong>condition number</strong> of the matrix: a very large condition number means the matrix is very likely singular and the inverse cannot be computed. For image data, with its many features and dimensions, $S_W$ is very likely to be singular.</p>
+<p>The way around the problem is to apply <strong>PCA before LDA</strong> to reduce the number of dimensions. How many PCA eigenvectors to use must be found by trial:</p>
+<ul>
+<li>too <strong>few</strong> and the discriminating information in the dataset is lost;</li>
+<li>too <strong>many</strong> and $S_W$ remains singular.</li>
+</ul>
+<p>After PCA, LDA can be applied to reduce the dimensionality further while preserving the information that discriminates the data. LDA produces very aggressive dimension reduction: the number of non-zero eigenvalues is at most $C - 1$, where $C$ is the number of classes, so only the eigenvectors corresponding to non-zero eigenvalues are used. This large reduction can occasionally remove important discriminating information and cause the classifier to fail.</p>
+<figure class="lesson-fig" id="fig-singularity"><img src="figures/singularity.png" alt="Why Fisherfaces applies PCA before LDA. The within-class scatter matrix has one row and column per feature but is estimated from the training images alone, so with image-sized feature vectors it is singular and cannot be inverted. Reducing the dimensionality with PCA first makes it invertible, provided the number of components kept is comfortably below the number of training images. The condition number of S_W is a practical test."><figcaption><b>Figure 2.</b> Why Fisherfaces applies PCA before LDA. The within-class scatter matrix has one row and column per feature but is estimated from the training images alone, so with image-sized feature vectors it is singular and cannot be inverted. Reducing the dimensionality with PCA first makes it invertible, provided the number of components kept is comfortably below the number of training images. The condition number of S_W is a practical test. <span class="credit">Image: <a href="https://scikit-learn.org/stable/datasets/real_world.html#the-olivetti-faces-dataset">The Database of Faces (Olivetti / AT&amp;T)</a>, AT&amp;T Laboratories Cambridge, <a href="https://cam-orl.co.uk/facedatabase.html">free for research use</a>.</span></figcaption></figure>
+<figure class="lesson-fig" id="fig-fisherfaces_gallery"><img src="figures/fisherfaces_gallery.png" alt="The two bases compared. Eigenfaces (top) are the directions of greatest variance in the database and look like smooth, face-shaped lighting patterns. Fisherfaces (bottom), obtained by running LDA in the PCA-reduced space and mapping the result back to pixels, look noisier because they emphasise the local differences that separate one identity from another rather than the variance that all faces share."><figcaption><b>Figure 3.</b> The two bases compared. Eigenfaces (top) are the directions of greatest variance in the database and look like smooth, face-shaped lighting patterns. Fisherfaces (bottom), obtained by running LDA in the PCA-reduced space and mapping the result back to pixels, look noisier because they emphasise the local differences that separate one identity from another rather than the variance that all faces share. <span class="credit">Image: <a href="https://scikit-learn.org/stable/datasets/real_world.html#the-olivetti-faces-dataset">The Database of Faces (Olivetti / AT&amp;T)</a>, AT&amp;T Laboratories Cambridge, <a href="https://cam-orl.co.uk/facedatabase.html">free for research use</a>.</span></figcaption></figure>
+<h2 id="the-fisherface-algorithm">The FisherFace algorithm</h2>
+<p>As with Eigenfaces the method splits into enrolment, which converts the database of faces into the LDA representation, and a simpler query algorithm.</p>
+<p>Given the database matrix $X$ whose columns are the image vectors $x_i$, with $C$ classes (individuals) and $n_j$ faces in each:</p>
+<ol>
+<li><strong>PCA step</strong>, as in the original paper and as in the Eigenface algorithm, with no class information: compute the mean μ of all data points, form the covariance matrix Σ of the mean-corrected points, solve for its eigenvectors $V$ and eigenvalues, and transform the dataset to a reduced space $X' = V_k^{T} X$ with $k$ eigenvectors. The value of $k$ is found by trial as described above.</li>
+<li><strong>LDA step</strong>: compute the global mean μ and the mean $\mu_j$ of each class, then the scatter matrix $S_j$ of every class individually, and from these the between-class scatter $S_B$ of equation (2) and the within-class scatter $S_W$. In many simple face datasets each individual has the same number of images; in real-world datasets they do not, which is why $S_B$ is weighted.</li>
+<li>Solve the standard eigenvalue problem for $S_W^{-1} S_B$, which is possible thanks to the earlier dimension reduction, and transform the database by the $C - 1$ eigenvectors corresponding to the $C - 1$ non-zero eigenvalues.</li>
+</ol>
+<p>To recognise an unknown query image, apply <strong>both</strong> the stored PCA and LDA transforms to it, then use a classifier such as nearest neighbours to decide which class it belongs to.</p>
+<figure class="lesson-fig" id="fig-fisherface_pipeline"><img src="figures/fisherface_pipeline.png" alt="The Fisherface algorithm. As in the original paper, PCA is applied first to reduce the dimensionality without using the labels, and multi-class LDA is then run in that reduced space. The number of PCA components is chosen by trial: too few loses discriminative information, too many leaves S_W singular. LDA itself keeps at most C − 1 directions for C identities."><figcaption><b>Figure 4.</b> The Fisherface algorithm. As in the original paper, PCA is applied first to reduce the dimensionality without using the labels, and multi-class LDA is then run in that reduced space. The number of PCA components is chosen by trial: too few loses discriminative information, too many leaves S_W singular. LDA itself keeps at most C − 1 directions for C identities. <span class="credit">Image: <a href="https://scikit-learn.org/stable/datasets/real_world.html#the-olivetti-faces-dataset">The Database of Faces (Olivetti / AT&amp;T)</a>, AT&amp;T Laboratories Cambridge, <a href="https://cam-orl.co.uk/facedatabase.html">free for research use</a>.</span></figcaption></figure>
+<figure class="lesson-fig" id="fig-fisher_query"><img src="figures/fisher_query.png" alt="Recognising a query face with Fisherfaces. Both stored transforms, PCA and then LDA, are applied to the query image and a nearest-neighbour search over the enrolled vectors gives the label. The three closest gallery faces are shown with their distances; a threshold on the distance, or on the ratio of the first to the second, lets the system answer &quot;unknown&quot; in open-set use."><figcaption><b>Figure 5.</b> Recognising a query face with Fisherfaces. Both stored transforms, PCA and then LDA, are applied to the query image and a nearest-neighbour search over the enrolled vectors gives the label. The three closest gallery faces are shown with their distances; a threshold on the distance, or on the ratio of the first to the second, lets the system answer "unknown" in open-set use. <span class="credit">Image: <a href="https://scikit-learn.org/stable/datasets/real_world.html#the-olivetti-faces-dataset">The Database of Faces (Olivetti / AT&amp;T)</a>, AT&amp;T Laboratories Cambridge, <a href="https://cam-orl.co.uk/facedatabase.html">free for research use</a>.</span></figcaption></figure>
+<h2 id="eigenfaces-versus-fisherfaces">Eigenfaces versus Fisherfaces</h2>
+<p>Belhumeur and co-authors, who introduced the Fisherface method, compared the two on the Harvard and Yale datasets. The Harvard dataset consists of faces taken under different illuminations, divided into subsets in which the variation in illumination grows. As you would expect from this and the previous lesson, the classification performance of the <strong>Eigenface</strong> method gets worse as illumination variation increases, while the <strong>Fisherface</strong> method performs consistently across all illuminations. On the Yale dataset, which varies both illumination and facial expression, Fisherfaces again outperform Eigenfaces. The error rate of the Eigenface method does fall as more principal components are used, eventually saturating at roughly 50 components.</p>
+<figure class="lesson-fig" id="fig-eigen_vs_fisher"><img src="figures/eigen_vs_fisher.png" alt="Eigenfaces versus Fisherfaces under illumination change. A linear illumination ramp of increasing strength is added to the query images only. Because PCA keeps the directions of greatest variance, and illumination produces a great deal of variance, the Eigenface representation degrades as the lighting changes. Fisherfaces, which choose directions that separate identities rather than directions of large variance, hold up much better. Belhumeur&#x27;s original paper reported the same pattern on the Harvard and Yale datasets."><figcaption><b>Figure 6.</b> Eigenfaces versus Fisherfaces under illumination change. A linear illumination ramp of increasing strength is added to the query images only. Because PCA keeps the directions of greatest variance, and illumination produces a great deal of variance, the Eigenface representation degrades as the lighting changes. Fisherfaces, which choose directions that separate identities rather than directions of large variance, hold up much better. Belhumeur's original paper reported the same pattern on the Harvard and Yale datasets. <span class="credit">Image: <a href="https://scikit-learn.org/stable/datasets/real_world.html#the-olivetti-faces-dataset">The Database of Faces (Olivetti / AT&amp;T)</a>, AT&amp;T Laboratories Cambridge, <a href="https://cam-orl.co.uk/facedatabase.html">free for research use</a>.</span></figcaption></figure>
+<section class="selfcheck"><h2 id="self-check">Check your understanding</h2><div class="sc-q" data-answer="1"><p class="sc-text">1. In multi-class LDA the between-class scatter S_B is defined from</p><ul class="sc-options"><li><label><input type="radio" name="sc05_05_0" value="0"> the difference between two class means</label></li><li><label><input type="radio" name="sc05_05_0" value="1"> the weighted deviation of each class mean from the global mean, weighted by the class size</label></li><li><label><input type="radio" name="sc05_05_0" value="2"> the sum of the per-class scatter matrices</label></li><li><label><input type="radio" name="sc05_05_0" value="3"> the image pixel variances</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>The within-class scatter is still the sum of the per-class scatter matrices.</p></div><div class="sc-q" data-answer="1"><p class="sc-text">2. Why is the within-class scatter matrix usually singular for face images?</p><ul class="sc-options"><li><label><input type="radio" name="sc05_05_1" value="0"> Because faces are symmetric</label></li><li><label><input type="radio" name="sc05_05_1" value="1"> Because it has one row per feature (thousands) but is estimated from far fewer training images</label></li><li><label><input type="radio" name="sc05_05_1" value="2"> Because the mean was not subtracted</label></li><li><label><input type="radio" name="sc05_05_1" value="3"> Because the images are greyscale</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>A singular S_W cannot be inverted, so S_W^-1 S_B cannot be formed.</p></div><div class="sc-q" data-answer="1"><p class="sc-text">3. How does the Fisherface method deal with the singularity of S_W?</p><ul class="sc-options"><li><label><input type="radio" name="sc05_05_2" value="0"> It abandons LDA</label></li><li><label><input type="radio" name="sc05_05_2" value="1"> It applies PCA first to reduce the dimensionality, then runs LDA in that reduced space</label></li><li><label><input type="radio" name="sc05_05_2" value="2"> It adds noise to the images</label></li><li><label><input type="radio" name="sc05_05_2" value="3"> It uses only two identities</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>The number of PCA components is found by trial: too few loses discrimination, too many leaves S_W singular.</p></div><div class="sc-q" data-answer="1"><p class="sc-text">4. For a database with C identities, LDA retains at most how many directions?</p><ul class="sc-options"><li><label><input type="radio" name="sc05_05_3" value="0"> C</label></li><li><label><input type="radio" name="sc05_05_3" value="1"> C - 1</label></li><li><label><input type="radio" name="sc05_05_3" value="2"> 4096</label></li><li><label><input type="radio" name="sc05_05_3" value="3"> One per training image</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>Only the eigenvectors with non-zero eigenvalues are used, and there are at most C - 1 of them.</p></div><div class="sc-q" data-answer="1"><p class="sc-text">5. A very large condition number for S_W indicates that</p><ul class="sc-options"><li><label><input type="radio" name="sc05_05_4" value="0"> the data is well conditioned</label></li><li><label><input type="radio" name="sc05_05_4" value="1"> the matrix is effectively singular and its inverse cannot be computed reliably</label></li><li><label><input type="radio" name="sc05_05_4" value="2"> there are too few classes</label></li><li><label><input type="radio" name="sc05_05_4" value="3"> the PCA step can be skipped</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>It is the practical test for whether enough dimension reduction has been applied.</p></div><div class="sc-q" data-answer="1"><p class="sc-text">6. Fisherfaces outperform Eigenfaces under varying illumination because</p><ul class="sc-options"><li><label><input type="radio" name="sc05_05_5" value="0"> they use colour information</label></li><li><label><input type="radio" name="sc05_05_5" value="1"> illumination creates large variance, which PCA preserves, whereas LDA selects directions that separate identities</label></li><li><label><input type="radio" name="sc05_05_5" value="2"> they need no training data</label></li><li><label><input type="radio" name="sc05_05_5" value="3"> they use larger images</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>Belhumeur&#x27;s paper reported this on the Harvard and Yale datasets.</p></div><div class="sc-q" data-answer="1"><p class="sc-text">7. To recognise a query image with a Fisherface database you must</p><ul class="sc-options"><li><label><input type="radio" name="sc05_05_6" value="0"> apply the LDA transform only</label></li><li><label><input type="radio" name="sc05_05_6" value="1"> apply both the stored PCA and LDA transforms, then classify, for example by nearest neighbour</label></li><li><label><input type="radio" name="sc05_05_6" value="2"> recompute the eigenvectors</label></li><li><label><input type="radio" name="sc05_05_6" value="3"> detect edges first</label></li></ul><p class="sc-feedback" hidden></p><p class="sc-explain" hidden>The query must pass through exactly the same pipeline as the enrolled faces.</p></div><p><button type="button" class="sc-check">Check answers</button> <span class="sc-score"></span></p></section>
+
+
+  
+
+  
+  <section class="credits">
+    <h2 id="image-credits">Image credits</h2>
+    <ul><li><a href="https://scikit-learn.org/stable/datasets/real_world.html#the-olivetti-faces-dataset">The Database of Faces (Olivetti / AT&amp;T)</a>, AT&amp;T Laboratories Cambridge, <a href="https://cam-orl.co.uk/facedatabase.html">free for research use</a></li></ul>
+    <p>Other figures are generated from synthetic data by the lesson engines.</p>
+  </section>
+  
+
+  <nav class="pager">
+    <a class="prev" href="05_04.html">&larr; 05.04 Linear discriminant analysis</a>
+    <a class="next" href="06_01.html">06.01 The bag of features representation &rarr;</a>
+  </nav>
+  <footer class="foot">© Dr Tony Scanlan, University of Limerick. Figures generated by the CE6021 lesson builder.</footer>
+</main>
+</div>
+</body>
+</html>

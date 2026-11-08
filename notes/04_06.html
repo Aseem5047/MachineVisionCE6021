@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>04.06 Histogram of oriented gradients · CE6021 Machine Vision</title>
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer="" src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer="" src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+
+<script defer="" src="site.js"></script>
+</head><body><header class="topbar"><a class="brand" href="index.html">CE6021 Machine Vision</a> <span class="crumb">Section 4: Object detection and classification</span></header>
+<div class="layout">
+<aside class="sidebar"><nav class="toc">
+<p class="toc-title">On this page</p>
+<ul>
+<li><a href="#learning-outcomes">Learning outcomes</a></li>
+<li><a href="#the-histogram-of-oriented-gradients">The histogram of oriented gradients</a></li>
+<li><a href="#the-hog-representation">The HOG representation</a></li>
+<li><a href="#training-a-pedestrian-detector">Training a pedestrian detector</a></li>
+<li><a href="#localisation-and-scale">Localisation and scale</a></li>
+<li><a href="#hog-in-python">HOG in Python</a></li>
+<li><a href="#self-check">Check your understanding</a></li>
+</ul>
+</nav><nav class="section-nav">
+<p class="toc-title">Section 4</p>
+<ul>
+<li><a href="04_01.html">1. Introduction to object detection</a></li>
+<li><a href="04_02.html">2. Machine learning for image recognition</a></li>
+<li><a href="04_03.html">3. Classifiers</a></li>
+<li><a href="04_04.html">4. Template matching</a></li>
+<li><a href="04_05.html">5. The Viola-Jones algorithm</a></li>
+<li class="current"><span>6. Histogram of oriented gradients</span></li>
+</ul>
+</nav></aside>
+<main class="lesson">
+<p class="kicker">Lesson 04.06</p>
+<h1>Histogram of oriented gradients</h1>
+<p class="summary">The HOG representation for pedestrian detection: gradient histograms over cells, block normalisation, the 3780-element descriptor, training with an SVM, and detection with a sliding window over an image pyramid.</p>
+<h2 id="learning-outcomes">Learning outcomes</h2>
+<p>After this lesson you should be able to:</p>
+<ul>
+<li>describe the <strong>HOG</strong> representation: gradients, cells, histograms with <strong>bilinear voting</strong>, blocks and normalisation;</li>
+<li>calculate the <strong>length</strong> of a HOG descriptor from its parameters;</li>
+<li>explain how a HOG pedestrian detector is <strong>trained</strong> and how it <strong>localises</strong> people at different scales;</li>
+<li>use the HOG functions in scikit-image and OpenCV.</li>
+</ul>
+<h2 id="the-histogram-of-oriented-gradients">The histogram of oriented gradients</h2>
+<p>HOG was developed for pedestrian detection but the approach is general. It uses a <strong>descriptor histogram</strong> of local pixel gradients over a fixed detector window as the feature vector, similar to the SIFT descriptor but simpler, and an <strong>SVM</strong> to classify the vectors. Like Viola-Jones it is a sliding-window detector with an <strong>image pyramid</strong> for scale; the window is <strong>128 × 64</strong> pixels, a shape that suits upright pedestrians, and all training images must be that size. Because it is trained on upright pedestrians the detector lacks rotation invariance, which matters in safety-critical use.</p>
+<figure class="lesson-fig" id="fig-hog_window"><img src="figures/hog_window.png" alt="The HOG detector window is 128 × 64 pixels, a shape that fits an upright pedestrian; every training image is this size. The window is tiled with 8 × 8 pixel cells, grouped into overlapping 2 × 2 blocks. Because the training images are upright, the trained detector is not rotation invariant.">
+<figcaption><b>Figure 1.</b> The HOG detector window is 128 × 64 pixels, a shape that fits an upright pedestrian; every training image is this size. The window is tiled with 8 × 8 pixel cells, grouped into overlapping 2 × 2 blocks. Because the training images are upright, the trained detector is not rotation invariant. <span class="credit">Image: <a href="https://commons.wikimedia.org/wiki/File:Niger,_Arlit_(18),_street_scene.jpg">Niger, Arlit (18), street scene</a>, NigerTZai, <a href="https://creativecommons.org/licenses/by-sa/4.0">CC BY-SA 4.0</a>.</span></figcaption>
+</figure>
+<h2 id="the-hog-representation">The HOG representation</h2>
+<p>Pixel gradients are computed with simple <strong>centre-difference</strong> estimators and <strong>no Gaussian pre-smoothing</strong>, since fine gradients carry important discriminative information; magnitude and angle follow as usual.</p>
+<h3>Cells and histogram formation</h3>
+<p>The basic unit is a <strong>cell</strong> of 8 × 8 pixels. For each cell a histogram of <strong>9 bins</strong> covering 0° to 180° is built; angles above 180° have 180° subtracted, so gradient direction is unsigned. Nine bins suit pedestrians, though other applications may need more. Each pixel's magnitude is assigned to the <strong>two nearest bin centres</strong> by <strong>bilinear interpolation</strong>: for a pixel at 77° with magnitude μ the nearest centres are 70° and 90°, and the magnitude is split in proportion to the distance from each,</p>
+<p>$$\mu_1 = \mu\, \frac{|\varphi_2 - \theta|}{|\varphi_2 - \varphi_1|}, \qquad \mu_2 = \mu\, \frac{|\theta - \varphi_1|}{|\varphi_2 - \varphi_1|}, \tag{1}$$</p>
+<p>so the closer bin receives the larger share.</p>
+<figure class="lesson-fig" id="fig-hog_cell"><img src="figures/hog_cell.png" alt="The HOG cell histogram. Gradients are computed with simple centre differences and no pre-smoothing, since fine gradients matter. Each cell's 64 gradients are binned by unsigned angle (0° to 180°) into 9 bins; each magnitude is split between the two nearest bin centres in proportion to the angular distance, so a small change in angle moves the histogram only slightly.">
+<figcaption><b>Figure 2.</b> The HOG cell histogram. Gradients are computed with simple centre differences and no pre-smoothing, since fine gradients matter. Each cell's 64 gradients are binned by unsigned angle (0° to 180°) into 9 bins; each magnitude is split between the two nearest bin centres in proportion to the angular distance, so a small change in angle moves the histogram only slightly. <span class="credit">Image: <a href="https://commons.wikimedia.org/wiki/File:Niger,_Arlit_(18),_street_scene.jpg">Niger, Arlit (18), street scene</a>, NigerTZai, <a href="https://creativecommons.org/licenses/by-sa/4.0">CC BY-SA 4.0</a>.</span></figcaption>
+</figure>
+<section class="worked-example" id="ex-hog_bilin-3">
+<h4>Worked example 1: HOG Bilinear Magnitude Interpolation</h4>
+<div class="example-q">
+<p>In the HOG algorithm a histogram is built in each cell using magnitude and direction information. The histogram uses $9$ orientation bins with centres at $0°, 20°, 40°, 60°, 80°, 100°, 120°, 140°, 160°$ (bin width $20°$).</p>
+<p>For a pixel with magnitude $\mu = 22$ and direction $\theta = 43.2°$, calculate the magnitude contribution to the <strong>two nearest bins</strong> using bilinear interpolation:</p>
+<p>$$\mu_1 = \mu \frac{|\phi_2 - \theta|}{|\phi_2 - \phi_1|}, \qquad\mu_2 = \mu \frac{|\theta - \phi_1|}{|\phi_2 - \phi_1|}$$</p>
+<p>Give your answer as a $1\times 2$ matrix $[\mu_1,\;\mu_2]$.</p>
+</div>
+<details class="example-sol">
+<summary>Show the solution</summary>
+<p><strong>Step 1 – Identify the two nearest bin centres.</strong></p>
+<p>$\theta = 43.2°$ lies between bin 2 at $\phi_1 = 40.0°$ and bin 3 at $\phi_2 = 60.0°$.</p>
+<p><strong>Step 2 – Apply bilinear interpolation.</strong></p>
+<p>The contribution to each bin is <strong>inversely</strong> proportional to the distance from the <em>other</em> bin centre.</p>
+<p>$$\mu_1 = \mu \frac{|\phi_2 - \theta|}{|\phi_2 - \phi_1|}= 22 \cdot \frac{|60.0 - 43.2|}{|60.0 - 40.0|}= 18.48$$</p>
+<p>$$\mu_2 = \mu \frac{|\theta - \phi_1|}{|\phi_2 - \phi_1|}= 22 \cdot \frac{|43.2 - 40.0|}{|60.0 - 40.0|}= 3.52$$</p>
+<p><strong>Verification:</strong> $\mu_1 + \mu_2 = 18.48 + 3.52 = 22.0$ (should equal $\mu = 22$)</p>
+</details>
+</section>
+<h3>Blocks and the final descriptor</h3>
+<p>The next level is a <strong>block</strong> of 2 × 2 cells, 256 pixels. The four cell histograms are joined into a 36-element vector and <strong>normalised</strong> together. The full window is covered by <strong>7 × 15 overlapping blocks</strong>, so the final descriptor has</p>
+<p>$$36 \times 7 \times 15 = 3780 \text{ values}. \tag{2}$$</p>
+<p>The vector is long because it represents a large patch. Because blocks overlap, each cell appears in several blocks with different normalisations; this captures the relative magnitudes of gradients in adjacent cells and improves invariance to illumination.</p>
+<figure class="lesson-fig" id="fig-hog_descriptor"><img src="figures/hog_descriptor.png" alt="From cells to the final descriptor. Cells are grouped into 2 × 2 blocks whose four 9-bin histograms are concatenated into 36 values and normalised together; the blocks overlap by one cell, so each cell appears in up to four blocks with different normalisations, which improves invariance to illumination. The 7 × 15 blocks of the window give a 3780-element feature vector.">
+<figcaption><b>Figure 3.</b> From cells to the final descriptor. Cells are grouped into 2 × 2 blocks whose four 9-bin histograms are concatenated into 36 values and normalised together; the blocks overlap by one cell, so each cell appears in up to four blocks with different normalisations, which improves invariance to illumination. The 7 × 15 blocks of the window give a 3780-element feature vector. <span class="credit">Image: <a href="https://commons.wikimedia.org/wiki/File:Niger,_Arlit_(18),_street_scene.jpg">Niger, Arlit (18), street scene</a>, NigerTZai, <a href="https://creativecommons.org/licenses/by-sa/4.0">CC BY-SA 4.0</a>.</span></figcaption>
+</figure>
+<section class="worked-example" id="ex-hog_calc-5">
+<h4>Worked example 2: HOG Descriptor Vector Length</h4>
+<div class="example-q">
+<p>A Histogram of Oriented Gradients descriptor is configured as follows:</p>
+<ul>
+<li>Cell size: $6 \times 6$ pixels</li>
+<li>Block size: $6 \times 6$ cells</li>
+<li>Orientation bins per cell: $6$</li>
+<li>Overlapping blocks: $21 \times 15$</li>
+</ul>
+<p>What is the <strong>total length</strong> of the descriptor vector?</p>
+</div>
+<details class="example-sol">
+<summary>Show the solution</summary>
+<p><strong>Step 1 – Short vector length per block.</strong></p>
+<p>Each block contains $6 \times 6 = 36$ cells. Each cell has a histogram of length $6$, so:</p>
+<p>$$\text{short vector} = 6 \times 6 \times 6 = 216$$</p>
+<p><em>(The cell pixel size affects feature resolution, not the vector length.)</em></p>
+<p><strong>Step 2 – Total descriptor length.</strong></p>
+<p>There are $21 \times 15 = 315$ overlapping blocks, so:</p>
+<p>$$\text{Length} = 21 \times 15 \times 216 = 68040$$</p>
+</details>
+</section>
+<h2 id="training-a-pedestrian-detector">Training a pedestrian detector</h2>
+<p>Pedestrian detection with HOG is a binary classification problem: pedestrian or not, for patches from training and test images. All training images are converted to HOG vectors and supplied, with labels, to a support vector machine. A significant disadvantage shared with most supervised approaches is the need for suitable training data, correctly scaled pedestrian patches that are time-consuming to collect and prepare.</p>
+<figure class="lesson-fig" id="fig-hog_pipeline"><img src="figures/hog_pipeline.png" alt="Pedestrian detection with HOG is a binary classification problem. Labelled 128 × 64 patches are converted to HOG vectors and used to train a support vector machine; the trained SVM is then applied to every window of an image pyramid, and overlapping detections are merged by non-maximum suppression. Collecting and preparing the training patches is the laborious part.">
+<figcaption><b>Figure 4.</b> Pedestrian detection with HOG is a binary classification problem. Labelled 128 × 64 patches are converted to HOG vectors and used to train a support vector machine; the trained SVM is then applied to every window of an image pyramid, and overlapping detections are merged by non-maximum suppression. Collecting and preparing the training patches is the laborious part.</figcaption>
+</figure>
+<p>Visualising the descriptor, by drawing each block's histogram as a polar star, shows that HOG is sensitive to the fine-scale edges of a silhouette; the SVM discriminates on this pattern of edges against the background. It is a fast detector for a single window, but scale invariance requires an image pyramid, which multiplies the computation.</p>
+<figure class="lesson-fig" id="fig-hog_visualisation"><img src="figures/hog_visualisation.png" alt="Visualising HOG. Each cell is drawn as a star of lines whose brightness gives the histogram value in each direction. The pedestrian's silhouette appears as a pattern of edges that the support vector machine learns to separate from background patches. The representation is sensitive to fine contours and is fast to compute for a single window.">
+<figcaption><b>Figure 5.</b> Visualising HOG. Each cell is drawn as a star of lines whose brightness gives the histogram value in each direction. The pedestrian's silhouette appears as a pattern of edges that the support vector machine learns to separate from background patches. The representation is sensitive to fine contours and is fast to compute for a single window. <span class="credit">Image: <a href="https://commons.wikimedia.org/wiki/File:Niger,_Arlit_(18),_street_scene.jpg">Niger, Arlit (18), street scene</a>, NigerTZai, <a href="https://creativecommons.org/licenses/by-sa/4.0">CC BY-SA 4.0</a>.</span></figcaption>
+</figure>
+<h2 id="localisation-and-scale">Localisation and scale</h2>
+<p>The detector window is slid around the image; at every position the HOG vector is computed and sent to the SVM. Since the window is fixed at 128 × 64 pixels, on a high-resolution image it finds only distant, small pedestrians: the detector is not scale invariant. As with Viola-Jones, a Gaussian <strong>image pyramid</strong>, blurring and subsampling by a factor such as 1.1 at each level, provides scale invariance; background pedestrians are found in the large levels and foreground ones in the small levels. A gradual scaling factor gives more levels, a better chance of detecting every scale, and more computation. With a very coarse pyramid (factor 4) many pedestrians are missed; with a fine one they are found, and <strong>non-maximum suppression</strong> removes the overlapping boxes that the fine pyramid produces. Pedestrians very close to the camera, with their legs out of frame, remain hard.</p>
+<figure class="lesson-fig" id="fig-pedestrian_pyramid"><img src="figures/pedestrian_pyramid.png" alt="Localisation and scale with OpenCV's pretrained HOG pedestrian detector, with the detector's internal grouping switched off so that every window hit is shown. A coarse pyramid whose levels are 1.5 times apart has few levels and finds little (left). A fine pyramid, factor 1.05, fires on many overlapping windows around each person (middle), and non-maximum suppression collapses each cluster to a single box (right). Some boxes on background survive, and the finer pyramid costs proportionately more classifications.">
+<figcaption><b>Figure 6.</b> Localisation and scale with OpenCV's pretrained HOG pedestrian detector, with the detector's internal grouping switched off so that every window hit is shown. A coarse pyramid whose levels are 1.5 times apart has few levels and finds little (left). A fine pyramid, factor 1.05, fires on many overlapping windows around each person (middle), and non-maximum suppression collapses each cluster to a single box (right). Some boxes on background survive, and the finer pyramid costs proportionately more classifications. <span class="credit">Image: <a href="https://commons.wikimedia.org/wiki/File:Niger,_Arlit_(18),_street_scene.jpg">Niger, Arlit (18), street scene</a>, NigerTZai, <a href="https://creativecommons.org/licenses/by-sa/4.0">CC BY-SA 4.0</a>.</span></figcaption>
+</figure>
+<h2 id="hog-in-python">HOG in Python</h2>
+<p>In scikit-image, <code>skimage.feature.hog</code> computes the descriptor for any patch and lets you set the number of orientation bins, the pixels per cell and the cells per block, and can return a visualisation; it is the tool for developing a HOG representation for a custom application. OpenCV ships a <strong>pretrained</strong> pedestrian detector: create a <code>cv2.HOGDescriptor</code>, set its SVM to <code>cv2.HOGDescriptor_getDefaultPeopleDetector()</code>, and call <code>detectMultiScale</code>, which runs the sliding window over an image pyramid with a chosen stride and scale factor.</p>
+<section class="selfcheck">
+<h2 id="self-check">Check your understanding</h2>
+<div class="sc-q" data-answer="1">
+<p class="sc-text">1. Why is the image NOT smoothed before computing HOG gradients?</p>
+<ul class="sc-options">
+<li><label><input type="radio" name="sc04_06_0" value="0"> Smoothing is too slow</label></li>
+<li><label><input type="radio" name="sc04_06_0" value="1"> Fine gradients carry information that is important for discrimination</label></li>
+<li><label><input type="radio" name="sc04_06_0" value="2"> The SVM requires raw pixels</label></li>
+<li><label><input type="radio" name="sc04_06_0" value="3"> Smoothing changes the window size</label></li>
+</ul>
+<p class="sc-feedback" hidden=""></p>
+<p class="sc-explain" hidden="">Simple centre differences on the unsmoothed image preserve the fine edge structure.</p>
+</div>
+<div class="sc-q" data-answer="1">
+<p class="sc-text">2. A pixel has gradient angle 77° and magnitude 30. With bin centres at 70° and 90°, its contribution to the 70° bin is</p>
+<ul class="sc-options">
+<li><label><input type="radio" name="sc04_06_1" value="0"> 30</label></li>
+<li><label><input type="radio" name="sc04_06_1" value="1"> 19.5</label></li>
+<li><label><input type="radio" name="sc04_06_1" value="2"> 10.5</label></li>
+<li><label><input type="radio" name="sc04_06_1" value="3"> 0</label></li>
+</ul>
+<p class="sc-feedback" hidden=""></p>
+<p class="sc-explain" hidden="">μ₁ = 30 × |90 − 77| / 20 = 19.5; the remaining 10.5 goes to the 90° bin.</p>
+</div>
+<div class="sc-q" data-answer="1">
+<p class="sc-text">3. A HOG block contains</p>
+<ul class="sc-options">
+<li><label><input type="radio" name="sc04_06_2" value="0"> one 8 × 8 cell</label></li>
+<li><label><input type="radio" name="sc04_06_2" value="1"> 2 × 2 cells, giving a 36-element normalised histogram vector</label></li>
+<li><label><input type="radio" name="sc04_06_2" value="2"> the whole 128 × 64 window</label></li>
+<li><label><input type="radio" name="sc04_06_2" value="3"> 9 pixels</label></li>
+</ul>
+<p class="sc-feedback" hidden=""></p>
+<p class="sc-explain" hidden="">Four cells of nine bins each are concatenated and normalised together.</p>
+</div>
+<div class="sc-q" data-answer="2">
+<p class="sc-text">4. With 9 bins, 2 × 2 cells per block and 7 × 15 blocks, the descriptor length is</p>
+<ul class="sc-options">
+<li><label><input type="radio" name="sc04_06_3" value="0"> 105</label></li>
+<li><label><input type="radio" name="sc04_06_3" value="1"> 945</label></li>
+<li><label><input type="radio" name="sc04_06_3" value="2"> 3780</label></li>
+<li><label><input type="radio" name="sc04_06_3" value="3"> 8192</label></li>
+</ul>
+<p class="sc-feedback" hidden=""></p>
+<p class="sc-explain" hidden="">36 values per block × 105 blocks = 3780.</p>
+</div>
+<div class="sc-q" data-answer="1">
+<p class="sc-text">5. Overlapping blocks help because</p>
+<ul class="sc-options">
+<li><label><input type="radio" name="sc04_06_4" value="0"> they halve the computation</label></li>
+<li><label><input type="radio" name="sc04_06_4" value="1"> each cell is normalised in several contexts, improving illumination invariance</label></li>
+<li><label><input type="radio" name="sc04_06_4" value="2"> they remove the need for a pyramid</label></li>
+<li><label><input type="radio" name="sc04_06_4" value="3"> they make the descriptor shorter</label></li>
+</ul>
+<p class="sc-feedback" hidden=""></p>
+<p class="sc-explain" hidden="">The redundancy captures the relative magnitudes of gradients in adjacent cells.</p>
+</div>
+<div class="sc-q" data-answer="1">
+<p class="sc-text">6. A very coarse image pyramid (large scaling factor) in HOG detection leads to</p>
+<ul class="sc-options">
+<li><label><input type="radio" name="sc04_06_5" value="0"> more false positives</label></li>
+<li><label><input type="radio" name="sc04_06_5" value="1"> missed pedestrians whose size falls between the few levels</label></li>
+<li><label><input type="radio" name="sc04_06_5" value="2"> rotation invariance</label></li>
+<li><label><input type="radio" name="sc04_06_5" value="3"> a longer descriptor</label></li>
+</ul>
+<p class="sc-feedback" hidden=""></p>
+<p class="sc-explain" hidden="">Few levels give a poor chance of a window matching each pedestrian's size; a fine pyramid finds more but costs more.</p>
+</div>
+<p><button type="button" class="sc-check">Check answers</button> <span class="sc-score"></span></p>
+</section>
+<section class="practice">
+<h2 id="practice">Practice questions</h2>
+<p>Question types from the CE6021 question bank that cover this lesson: <code>hog_calc</code>, <code>hog_bilin</code>.</p>
+</section>
+<section class="credits">
+<h2 id="image-credits">Image credits</h2>
+<ul>
+<li><a href="https://commons.wikimedia.org/wiki/File:Niger,_Arlit_(18),_street_scene.jpg">Niger, Arlit (18), street scene</a>, NigerTZai, <a href="https://creativecommons.org/licenses/by-sa/4.0">CC BY-SA 4.0</a></li>
+</ul>
+<p>Other figures are generated from synthetic data by the lesson engines.</p>
+</section>
+<nav class="pager"><a class="prev" href="04_05.html">← 04.05 The Viola-Jones algorithm</a> 05.01 Introduction to facial recognition →</nav><footer class="foot">© Dr Tony Scanlan, University of Limerick. Figures generated by the CE6021 lesson builder.</footer></main></div></body></html>
