@@ -31,6 +31,7 @@ from helpers.dataloader import get_data_path, load_image  # noqa: F401
 # removed) of "Oranges in a Box" by Sidheeq, CC BY-SA 3.0:
 ORANGES_IMAGE_SOURCE_URL = "https://commons.wikimedia.org/wiki/File:Oranges_in_a_Box.jpg"
 
+
 class WatershedSegmenter:
     """Marker-based Watershed segmentation of touching objects.
 
@@ -81,7 +82,7 @@ class WatershedSegmenter:
         Returns:
             np.ndarray: H x W uint8 image, red minus blue (negative values become 0).
         """
-        raise NotImplementedError("Implement this method")
+        return cv2.subtract(image[:, :, 0], image[:, :, 2])
 
     def threshold(self, channel):
         """Step 2 — turn the oranges white and everything else black (Otsu threshold).
@@ -92,7 +93,9 @@ class WatershedSegmenter:
         Returns:
             np.ndarray: H x W uint8 binary image (values 0 or 255).
         """
-        raise NotImplementedError("Implement this method")
+        _, binary = cv2.threshold(channel, 0, 255,
+                                  cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        return binary
 
     def remove_noise(self, binary):
         """Step 3 — morphological opening to remove small white speckle.
@@ -103,7 +106,10 @@ class WatershedSegmenter:
         Returns:
             np.ndarray: H x W uint8 binary image, same shape.
         """
-        raise NotImplementedError("Implement this method")
+        kernel = np.ones((self.kernel_size, self.kernel_size), np.uint8)
+        opening = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel,
+                                   iterations=self.open_iterations)
+        return opening
 
     def background_mask(self, opening):
         """Step 4 — the pixels that are certainly background (white).
@@ -121,7 +127,9 @@ class WatershedSegmenter:
         Returns:
             np.ndarray: H x W uint8 binary image — white = certainly background.
         """
-        raise NotImplementedError("Implement this method")
+        kernel = np.ones((self.kernel_size, self.kernel_size), np.uint8)
+        grown = cv2.dilate(opening, kernel, iterations=self.dilate_iterations)
+        return cv2.bitwise_not(grown)
 
     def distance_transform(self, opening):
         """Step 5 — each white pixel's distance to the nearest black pixel.
@@ -142,7 +150,10 @@ class WatershedSegmenter:
         Returns:
             np.ndarray: H x W float32 distance map (in pixels), same shape as opening.
         """
-        raise NotImplementedError("Implement this method")
+        padded = cv2.copyMakeBorder(opening, 1, 1, 1, 1,
+                                    cv2.BORDER_CONSTANT, value=0)
+        dist = cv2.distanceTransform(padded, cv2.DIST_L2, self.dist_mask_size)
+        return dist[1:-1, 1:-1]
 
     def orange_markers(self, dist):
         """Step 6 — put one small marker at each local maximum of the distance map.
@@ -159,7 +170,16 @@ class WatershedSegmenter:
         Returns:
             np.ndarray: H x W uint8 binary image — white circles at the peaks.
         """
-        raise NotImplementedError("Implement this method")
+        self.peaks = peak_local_max(dist, min_distance=self.peak_spacing,
+                                    threshold_abs=self.peak_threshold)
+
+        marker_mask = np.zeros(dist.shape, np.uint8)
+
+        for row, col in self.peaks:
+            cv2.circle(marker_mask, (int(col), int(row)),
+                       self.marker_radius, 255, -1)
+
+        return marker_mask
 
     def unknown_region(self, bg_mask, marker_mask):
         """Step 7 — the zone that is neither background nor a marker —
@@ -172,7 +192,8 @@ class WatershedSegmenter:
         Returns:
             np.ndarray: H x W uint8 binary image — white where neither input is white.
         """
-        raise NotImplementedError("Implement this method")
+        known = cv2.bitwise_or(bg_mask, marker_mask)
+        return cv2.bitwise_not(known)
 
     def create_markers(self, marker_mask, unknown):
         """Step 8 — build the initial marker map that watershed floods from.
@@ -191,7 +212,10 @@ class WatershedSegmenter:
             np.ndarray: H x W int32 marker map (background = 1, unknown = 0,
             each marker a unique integer >= 2).
         """
-        raise NotImplementedError("Implement this method")
+        _, markers = cv2.connectedComponents(marker_mask)
+        markers = markers + 1            # background becomes 1, not 0
+        markers[unknown == 255] = 0      # unknown region goes back to 0
+        return markers
 
     def apply_watershed(self, image, markers):
         """Step 9 — flood from the markers over the colour image.
@@ -208,7 +232,7 @@ class WatershedSegmenter:
             np.ndarray: H x W int32 marker map. Boundary pixels are labelled -1;
             every other pixel has the label of the marker it was flooded from.
         """
-        raise NotImplementedError("Implement this method")
+        return cv2.watershed(image, markers.copy())
 
     def segment(self, image):
         """Step 10 — run the whole pipeline using the methods above.
@@ -224,4 +248,14 @@ class WatershedSegmenter:
             np.ndarray: H x W int32 marker map. Boundary pixels are labelled
             -1; background is 1; each detected orange has a unique label >= 2.
         """
-        raise NotImplementedError("Implement this method")
+        self.channel = self.colour_channel(image)
+        self.binary = self.threshold(self.channel)
+        self.opening = self.remove_noise(self.binary)
+        self.bg_mask = self.background_mask(self.opening)
+        self.dist = self.distance_transform(self.opening)
+        self.marker_mask = self.orange_markers(self.dist)
+        self.unknown = self.unknown_region(self.bg_mask, self.marker_mask)
+        self.markers0 = self.create_markers(self.marker_mask, self.unknown)
+        self.markers = self.apply_watershed(image, self.markers0)
+
+        return self.markers
